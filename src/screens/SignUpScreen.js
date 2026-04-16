@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
-  Dimensions,
+  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,12 +11,20 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Google from 'expo-auth-session/providers/google';
 import AnimatedBackground from '../components/AnimatedBackground';
 import { Colors } from '../theme/colors';
+import {
+  signInWithGoogleWeb,
+  signInWithGoogleNative,
+  signUpWithEmail,
+  GOOGLE_WEB_CLIENT_ID,
+} from '../services/authService';
 
-const { width } = Dimensions.get('window');
+
 
 function InputField({ label, placeholder, value, onChangeText, secureTextEntry, keyboardType }) {
   const [focused, setFocused] = useState(false);
@@ -66,6 +75,22 @@ export default function SignUpScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const [, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+  });
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token, access_token } = response.params;
+      setGoogleLoading(true);
+      signInWithGoogleNative(id_token, access_token)
+        .catch((e) => Alert.alert('Sign In Error', e.message))
+        .finally(() => setGoogleLoading(false));
+    }
+  }, [response]);
 
   useEffect(() => {
     Animated.parallel([
@@ -73,6 +98,46 @@ export default function SignUpScreen({ navigation }) {
       Animated.timing(slideAnim, { toValue: 0, duration: 700, delay: 200, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    if (Platform.OS === 'web') {
+      setGoogleLoading(true);
+      try {
+        await signInWithGoogleWeb();
+      } catch (e) {
+        Alert.alert('Google Sign-In Failed', e.message);
+      } finally {
+        setGoogleLoading(false);
+      }
+    } else {
+      promptAsync();
+    }
+  };
+
+  const handleSignUp = async () => {
+    if (!username || !email || !password) {
+      Alert.alert('Missing Fields', 'Please fill in all fields.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert('Password Mismatch', 'Passwords do not match.');
+      return;
+    }
+    if (!agreed) {
+      Alert.alert('Terms Required', 'Please agree to Terms & Conditions.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await signUpWithEmail(email, password, username);
+    } catch (e) {
+      Alert.alert('Sign Up Failed', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isLoading = loading || googleLoading;
 
   return (
     <View style={styles.root}>
@@ -146,14 +211,23 @@ export default function SignUpScreen({ navigation }) {
               </TouchableOpacity>
 
               {/* Create Account Button */}
-              <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.primaryBtn}
+                onPress={handleSignUp}
+                disabled={isLoading}
+              >
                 <LinearGradient
                   colors={[Colors.red, Colors.redDark]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.primaryBtnGradient}
                 >
-                  <Text style={styles.primaryBtnText}>Create Account</Text>
+                  {loading ? (
+                    <ActivityIndicator color={Colors.white} />
+                  ) : (
+                    <Text style={styles.primaryBtnText}>Create Account</Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -164,17 +238,23 @@ export default function SignUpScreen({ navigation }) {
                 <View style={styles.dividerLine} />
               </View>
 
-              {/* Social Buttons */}
-              <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
-                  <Text style={styles.googleIcon}>G</Text>
-                  <Text style={styles.socialText}>Google</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
-                  <Text style={styles.appleIcon}></Text>
-                  <Text style={styles.socialText}>Apple</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Google Sign-In Button */}
+              <TouchableOpacity
+                style={styles.googleBtn}
+                activeOpacity={0.8}
+                onPress={handleGoogleSignIn}
+                disabled={isLoading}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator color={Colors.white} size="small" />
+                ) : (
+                  <Image
+                    source={require('../../assets/google-logo.png')}
+                    style={styles.googleLogo}
+                    resizeMode="contain"
+                  />
+                )}
+              </TouchableOpacity>
 
               {/* Footer */}
               <View style={styles.footerRow}>
@@ -363,37 +443,21 @@ const styles = StyleSheet.create({
   },
 
   // Social
-  socialRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  socialBtn: {
-    flex: 1,
-    flexDirection: 'row',
+  googleBtn: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.socialBg,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.socialBorder,
-    paddingVertical: 13,
-    gap: 8,
+    paddingVertical: 10,
+    marginBottom: 24,
+    minHeight: 64,
   },
-  googleIcon: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#4285F4',
-    fontStyle: 'italic',
-  },
-  appleIcon: {
-    fontSize: 17,
-    color: Colors.white,
-  },
-  socialText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '600',
+  googleLogo: {
+    width: 36,
+    height: 36,
   },
 
   // Footer

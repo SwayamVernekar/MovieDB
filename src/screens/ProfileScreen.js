@@ -57,7 +57,7 @@ function SettingsItem({ label, value, onToggle, isToggle, onPress }) {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { user, myList, watched, avgRating, removeFromList, removeFromWatched } = useUser();
+  const { user, myList, watched, avgRating, removeFromList, removeFromWatched, signOut } = useUser();
   const [activeTab, setActiveTab] = useState('My List');
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(true);
@@ -159,7 +159,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={styles.logoutBtn}
-              onPress={() => navigation.getParent()?.replace('Login')}
+              onPress={signOut}
               activeOpacity={0.85}
             >
               <Text style={styles.logoutText}>Log Out</Text>
