@@ -133,7 +133,11 @@ export default function LoginScreen({ navigation }) {
               </TouchableOpacity>
 
               {/* Sign In Button */}
-              <TouchableOpacity activeOpacity={0.85} style={styles.primaryBtn}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.primaryBtn}
+                onPress={() => navigation.replace('MainTabs')}
+              >
                 <LinearGradient
                   colors={[Colors.red, Colors.redDark]}
                   start={{ x: 0, y: 0 }}
@@ -153,11 +157,19 @@ export default function LoginScreen({ navigation }) {
 
               {/* Social Buttons */}
               <View style={styles.socialRow}>
-                <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.socialBtn}
+                  activeOpacity={0.8}
+                  onPress={() => navigation.replace('MainTabs')}
+                >
                   <GoogleLogo />
                   <Text style={styles.socialText}>Google</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.socialBtn} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.socialBtn}
+                  activeOpacity={0.8}
+                  onPress={() => navigation.replace('MainTabs')}
+                >
                   <AppleLogo />
                   <Text style={styles.socialText}>Apple</Text>
                 </TouchableOpacity>
