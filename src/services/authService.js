@@ -27,6 +27,16 @@ import { createUserProfile } from './firestoreService';
 export const GOOGLE_WEB_CLIENT_ID =
   '252341094396-REPLACE_WITH_REAL_WEB_CLIENT_ID.apps.googleusercontent.com';
 
+/**
+ * Native client IDs (required for Expo Go / native Google Sign-In).
+ * Create these in Google Cloud Console (OAuth 2.0 Client IDs).
+ */
+export const GOOGLE_ANDROID_CLIENT_ID =
+  '252341094396-REPLACE_WITH_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+
+export const GOOGLE_IOS_CLIENT_ID =
+  '252341094396-REPLACE_WITH_IOS_CLIENT_ID.apps.googleusercontent.com';
+
 // ── Web: signInWithPopup ───────────────────────────────────────────
 
 export async function signInWithGoogleWeb() {

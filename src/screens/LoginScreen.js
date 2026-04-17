@@ -33,6 +33,8 @@ import {
   signInWithGoogleNative,
   signInWithEmail,
   GOOGLE_WEB_CLIENT_ID,
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
 } from '../services/authService';
 
 // ── Input Field ───────────────────────────────────────────────────
@@ -83,8 +85,8 @@ export default function LoginScreen({ navigation }) {
   // expo-auth-session Google hook (for native only)
   const [, response, promptAsync] = Google.useAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
-    // iosClientId: 'YOUR_IOS_CLIENT_ID',      // add for iOS builds
-    // androidClientId: 'YOUR_ANDROID_CLIENT_ID', // add for Android builds
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
   });
 
   // Handle native Google auth response
