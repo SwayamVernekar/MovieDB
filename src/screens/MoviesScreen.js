@@ -5,7 +5,7 @@ import { Colors } from '../theme/colors';
 import { getPopularMovies, getTopRatedMovies } from '../api/tmdb';
 import SectionRow from '../components/home/SectionRow';
 
-export default function MoviesScreen() {
+export default function MoviesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [popular, setPopular] = useState([]);
   const [topRated, setTopRated] = useState([]);
@@ -17,13 +17,30 @@ export default function MoviesScreen() {
     getTopRatedMovies().then((d) => { setTopRated((d.results || []).slice(0, 10)); setLoadingT(false); });
   }, []);
 
+  const handleMoviePress = (movie) => {
+    if (!movie) return;
+    navigation.navigate('MovieDetail', { movieId: movie.id, movie });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
       <Text style={styles.title}>Movies</Text>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <SectionRow title="Popular Movies" emoji="🎬" movies={popular} loading={loadingP} />
-        <SectionRow title="Top Rated" emoji="⭐" movies={topRated} loading={loadingT} />
+        <SectionRow
+          title="Popular Movies"
+          emoji="🎬"
+          movies={popular}
+          loading={loadingP}
+          onMoviePress={handleMoviePress}
+        />
+        <SectionRow
+          title="Top Rated"
+          emoji="⭐"
+          movies={topRated}
+          loading={loadingT}
+          onMoviePress={handleMoviePress}
+        />
         <View style={{ height: 24 }} />
       </ScrollView>
     </View>

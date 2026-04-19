@@ -20,6 +20,7 @@ import { UserProvider, useUser } from '../context/UserContext';
 import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import MainTabNavigator from './MainTabNavigator';
+import MovieDetailScreen from '../screens/MovieDetailScreen';
 import { Colors } from '../theme/colors';
 
 const Stack = createStackNavigator();
@@ -61,11 +62,17 @@ function RootNavigator() {
     >
       {user ? (
         // ── Authenticated ──────────────────────────────────────────
-        <Stack.Screen
-          name="MainTabs"
-          component={MainTabNavigator}
-          options={{ gestureEnabled: false }}
-        />
+        <>
+          <Stack.Screen
+            name="MainTabs"
+            component={MainTabNavigator}
+            options={{ gestureEnabled: false }}
+          />
+          <Stack.Screen
+            name="MovieDetail"
+            component={MovieDetailScreen}
+          />
+        </>
       ) : (
         // ── Unauthenticated ────────────────────────────────────────
         <>

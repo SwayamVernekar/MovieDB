@@ -121,6 +121,11 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handleMoviePress = (movie) => {
+    if (!movie) return;
+    navigation.navigate('MovieDetail', { movieId: movie.id, movie });
+  };
+
   // Navigate to Profile tab (within bottom tab navigator)
   const handleProfilePress = () => {
     navigation.navigate('Profile');
@@ -186,7 +191,7 @@ export default function HomeScreen({ navigation }) {
           emoji="🔥"
           movies={trending}
           loading={loadingTrending}
-          onMoviePress={() => {}}
+          onMoviePress={handleMoviePress}
         />
 
         {/* Popular This Week */}
@@ -195,7 +200,7 @@ export default function HomeScreen({ navigation }) {
           emoji="🗓️"
           movies={popular}
           loading={loadingPopular}
-          onMoviePress={() => {}}
+          onMoviePress={handleMoviePress}
         />
 
         {/* Recommended For You */}
@@ -204,7 +209,7 @@ export default function HomeScreen({ navigation }) {
           emoji="✨"
           movies={topRated}
           loading={loadingTopRated}
-          onMoviePress={() => {}}
+          onMoviePress={handleMoviePress}
         />
 
         {/* Bottom spacing for tab bar */}
