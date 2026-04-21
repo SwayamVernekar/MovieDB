@@ -73,3 +73,7 @@ export const getMovieCredits = (movieId) =>
 /** Movie reviews */
 export const getMovieReviews = (movieId) =>
   tmdbFetch(`/movie/${movieId}/reviews`);
+
+/** Movie videos (trailers, teasers, clips) */
+export const getMovieVideos = (movieId) =>
+  tmdbFetch(`/movie/${movieId}/videos`);
