@@ -1,18 +1,18 @@
 /**
  * AppNavigator
  * ─────────────────────────────────────────────────────────────────
- * Auth-driven routing:
- *  - Checks Firebase auth state via UserContext
- *  - Shows a splash/loading screen while auth is being verified
- *  - Routes to Login/SignUp if unauthenticated
- *  - Routes to MainTabs if authenticated
+ * Uses @react-navigation/native-stack for the authenticated routes.
+ * native-stack does NOT use react-native-gesture-handler's PanGestureHandler
+ * on web, which means scroll events are NOT intercepted and ScrollView
+ * inside screens works correctly.
+ *
+ * @react-navigation/stack (JS-based) intercepts pointer/wheel events on web
+ * via its gesture handler for swipe-back support, which breaks ScrollView.
  */
 
 import React from 'react';
-import {
-  NavigationContainer,
-} from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
@@ -23,7 +23,7 @@ import MainTabNavigator from './MainTabNavigator';
 import MovieDetailScreen from '../screens/MovieDetailScreen';
 import { Colors } from '../theme/colors';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 // ── Splash screen while Firebase checks auth ──────────────────────
 function SplashScreen() {
@@ -45,36 +45,26 @@ function RootNavigator() {
       screenOptions={{
         headerShown: false,
         gestureEnabled: true,
-        cardStyleInterpolator: ({ current, layouts }) => ({
-          cardStyle: {
-            opacity: current.progress,
-            transform: [
-              {
-                translateX: current.progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [layouts.screen.width * 0.08, 0],
-                }),
-              },
-            ],
-          },
-        }),
+        animation: 'fade',
+        contentStyle: { backgroundColor: Colors.bg },
       }}
     >
       {user ? (
-        // ── Authenticated ──────────────────────────────────────────
+        // ── Authenticated ─────────────────────────────────────────
         <>
           <Stack.Screen
             name="MainTabs"
             component={MainTabNavigator}
-            options={{ gestureEnabled: false }}
+            options={{ gestureEnabled: false, animation: 'none' }}
           />
           <Stack.Screen
             name="MovieDetail"
             component={MovieDetailScreen}
+            options={{ animation: 'slide_from_right' }}
           />
         </>
       ) : (
-        // ── Unauthenticated ────────────────────────────────────────
+        // ── Unauthenticated ───────────────────────────────────────
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="SignUp" component={SignUpScreen} />

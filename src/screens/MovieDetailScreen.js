@@ -4,17 +4,18 @@ import {
   Text,
   Image,
   ScrollView,
+  FlatList,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   StatusBar,
   ActivityIndicator,
   Dimensions,
   Platform,
+  Animated,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
 import { Colors } from '../theme/colors';
 import {
   backdropUrl,
@@ -23,623 +24,730 @@ import {
   getMovieDetails,
   getMovieVideos,
 } from '../api/tmdb';
+import { useUser } from '../context/UserContext';
 
-const { width } = Dimensions.get('window');
-const POSTER_WIDTH = 120;
-const POSTER_HEIGHT = 180;
+// ─── Helpers ──────────────────────────────────────────────────────
 
-function formatRuntime(minutes) {
-  if (!minutes || Number.isNaN(minutes)) return '';
-  const hrs = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hrs <= 0) return `${mins}m`;
-  return `${hrs}h ${mins}m`;
+function formatRuntime(mins) {
+  if (!mins || isNaN(mins)) return null;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function formatMoney(value) {
-  if (!value || Number.isNaN(value)) return '';
+function formatMoney(val) {
+  if (!val || isNaN(val) || val === 0) return null;
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       maximumFractionDigits: 0,
-    }).format(value);
-  } catch (err) {
-    return `$${Math.round(value).toLocaleString('en-US')}`;
+    }).format(val);
+  } catch {
+    return `$${val.toLocaleString()}`;
   }
 }
 
-function pickBestTrailer(videos = []) {
+function pickTrailer(videos = []) {
   if (!videos.length) return null;
-  const isYouTube = (v) => v?.site === 'YouTube' && v?.key;
-  const isTrailer = (v) => (v?.type || '').toLowerCase() === 'trailer';
-  const isTeaser = (v) => (v?.type || '').toLowerCase() === 'teaser';
-
-  const officialTrailer = videos.find((v) => isYouTube(v) && isTrailer(v) && v.official);
-  if (officialTrailer) return officialTrailer;
-
-  const trailer = videos.find((v) => isYouTube(v) && isTrailer(v));
-  if (trailer) return trailer;
-
-  const teaser = videos.find((v) => isYouTube(v) && isTeaser(v));
-  if (teaser) return teaser;
-
-  return videos.find((v) => isYouTube(v)) || null;
+  const yt = (v) => v?.site === 'YouTube' && v?.key;
+  return (
+    videos.find((v) => yt(v) && v.type === 'Trailer' && v.official) ||
+    videos.find((v) => yt(v) && v.type === 'Trailer') ||
+    videos.find((v) => yt(v) && v.type === 'Teaser') ||
+    videos.find((v) => yt(v)) ||
+    null
+  );
 }
+
+const SCREEN_W = Dimensions.get('window').width;
+const TRAILER_H = Math.round((SCREEN_W - 32) * (9 / 16));
+const HERO_H = 280;
+const POSTER_W = 110;
+const POSTER_H = 165;
+
+// ─── Inline Trailer ──────────────────────────────────────────────
+//
+// Web   → <iframe> embedded directly. Always works.
+// Native → YouTube thumbnail card. Tapping opens the YouTube app
+//           (or browser). This is the only reliable approach in
+//           Expo Go — YouTube blocks WebView embedding on mobile.
+
+function InlineTrailer({ trailerKey, title }) {
+  const embedUrl = `https://www.youtube.com/embed/${trailerKey}?controls=1&modestbranding=1&playsinline=1&rel=0`;
+  const watchUrl = `https://www.youtube.com/watch?v=${trailerKey}`;
+  // YouTube always has a maxresdefault thumbnail; fall back to hqdefault
+  const thumbUrl = `https://img.youtube.com/vi/${trailerKey}/hqdefault.jpg`;
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.trailerBox}>
+        {React.createElement('iframe', {
+          src: embedUrl,
+          title: title || 'Trailer',
+          frameBorder: '0',
+          allow:
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+          allowFullScreen: true,
+          style: {
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+          },
+        })}
+      </View>
+    );
+  }
+
+  // Native: thumbnail + play button → opens YouTube app / browser
+  const openYouTube = () => {
+    // Try deep-link into YouTube app first, fall back to browser
+    const appUrl = `youtube://watch?v=${trailerKey}`;
+    Linking.canOpenURL(appUrl)
+      .then((can) => Linking.openURL(can ? appUrl : watchUrl))
+      .catch(() => Linking.openURL(watchUrl));
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.trailerBox}
+      onPress={openYouTube}
+      activeOpacity={0.88}
+    >
+      <Image
+        source={{ uri: thumbUrl }}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      {/* Dark overlay */}
+      <View style={styles.trailerOverlay} />
+      {/* Play circle */}
+      <View style={styles.playCircle}>
+        <Text style={styles.playIcon}>▶</Text>
+      </View>
+      {/* "Tap to watch" label */}
+      <View style={styles.trailerLabel}>
+        <Text style={styles.trailerLabelText}>Tap to watch trailer</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────
 
 export default function MovieDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const { addToList, removeFromList, isInList } = useUser();
+
   const params = route?.params || {};
-  const movieId = params.movieId || params.movie?.id;
+  const movieId = params.movieId ?? params.movie?.id;
 
   const [detail, setDetail] = useState(params.movie || null);
   const [credits, setCredits] = useState(null);
   const [trailer, setTrailer] = useState(null);
-  const [trailerOpen, setTrailerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // ── Fetch ──────────────────────────────────────────────────────
   useEffect(() => {
-    let mounted = true;
-
-    async function load() {
+    let live = true;
+    async function fetch() {
       if (!movieId) {
-        if (mounted) {
-          setError('Movie not found.');
-          setLoading(false);
-        }
+        setError('Movie not found.');
+        setLoading(false);
         return;
       }
-
-      setError(null);
       setLoading(true);
+      setError(null);
       try {
-        const [detailData, creditsData, videosData] = await Promise.all([
+        const [det, cred, vids] = await Promise.all([
           getMovieDetails(movieId),
           getMovieCredits(movieId),
           getMovieVideos(movieId),
         ]);
-        if (mounted) {
-          setDetail(detailData);
-          setCredits(creditsData);
-          setTrailer(pickBestTrailer(videosData?.results || []));
-          setLoading(false);
-        }
-      } catch (err) {
-        if (mounted) {
-          setError('Could not load movie details.');
-          setLoading(false);
-        }
+        if (!live) return;
+        setDetail(det);
+        setCredits(cred);
+        setTrailer(pickTrailer(vids?.results || []));
+      } catch {
+        if (live) setError('Could not load movie details.');
+      } finally {
+        if (live) setLoading(false);
       }
     }
-
-    load();
-    return () => {
-      mounted = false;
-    };
+    fetch();
+    return () => { live = false; };
   }, [movieId]);
 
-  const title = detail?.title || detail?.name || 'Movie';
-  const backdrop = backdropUrl(detail?.backdrop_path) || backdropUrl(detail?.poster_path);
-  const poster = imgUrl(detail?.poster_path, 'w342');
-  const rating = detail?.vote_average ? detail.vote_average.toFixed(1) : 'N/A';
-  const year = (detail?.release_date || detail?.first_air_date || '').slice(0, 4);
-  const runtime = formatRuntime(detail?.runtime);
-  const genres = (detail?.genres || []).map((g) => g.name).join(', ');
-  const cast = useMemo(() => (credits?.cast || []).slice(0, 10), [credits]);
-  const trailerUrl = trailer?.key
-    ? `https://www.youtube.com/embed/${trailer.key}?controls=1&modestbranding=1&playsinline=1`
-    : null;
+  // ── Derived ────────────────────────────────────────────────────
+  const title    = detail?.title || detail?.name || 'Movie';
+  const tagline  = detail?.tagline || '';
+  const overview = detail?.overview || '';
+  const rating   = detail?.vote_average ? detail.vote_average.toFixed(1) : null;
+  const year     = (detail?.release_date || detail?.first_air_date || '').slice(0, 4);
+  const runtime  = formatRuntime(detail?.runtime);
+  const genres   = detail?.genres || [];
+  const budget   = formatMoney(detail?.budget);
+  const revenue  = formatMoney(detail?.revenue);
+  const status   = detail?.status || null;
+  const langs    = (detail?.spoken_languages || []).map((l) => l.english_name).join(', ') || null;
+  const cast     = useMemo(() => (credits?.cast || []).slice(0, 12), [credits]);
+  const backdrop = backdropUrl(detail?.backdrop_path) || imgUrl(detail?.poster_path, 'w780');
+  const poster   = imgUrl(detail?.poster_path, 'w342');
+  const inList   = detail ? isInList(detail.id) : false;
 
-  const content = (
-    <>
-      <View style={styles.heroWrap}>
-        {backdrop ? (
-          <Image source={{ uri: backdrop }} style={styles.backdrop} resizeMode="cover" />
-        ) : (
-          <View style={[styles.backdrop, styles.backdropFallback]} />
-        )}
+  const ratingColor =
+    rating && parseFloat(rating) >= 7.5
+      ? '#4CAF50'
+      : rating && parseFloat(rating) >= 6
+      ? Colors.gold
+      : '#FF7043';
 
-        <LinearGradient
-          colors={Colors.gradientHero}
-          locations={[0.1, 0.6, 1]}
-          style={StyleSheet.absoluteFill}
-        />
+  // ── Shared back button (always rendered so user can go back) ───
+  const BackBtn = () => (
+    <TouchableOpacity
+      style={[styles.backBtn, { top: insets.top + 12 }]}
+      onPress={() => navigation.goBack()}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.backBtnText}>←</Text>
+    </TouchableOpacity>
+  );
 
-        <TouchableOpacity
-          style={[styles.backBtn, { top: insets.top + 10 }]}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+        <BackBtn />
+        <ActivityIndicator color={Colors.red} size="large" />
+        <Text style={styles.loadingLabel}>Loading…</Text>
+      </View>
+    );
+  }
 
-        <View style={styles.heroContent}>
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+        <BackBtn />
+        <Text style={styles.errorMsg}>{error}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+
+      <ScrollView
+        style={styles.scroller}
+        contentContainerStyle={styles.scrollerContent}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+      >
+        {/* Back button — inside ScrollView so it is part of scrollable area,
+            but positioned absolutely so it floats above content */}
+        <BackBtn />
+        {/* ── Hero ─────────────────────────────────────────────── */}
+        <View style={styles.hero}>
+          {backdrop ? (
+            <Image source={{ uri: backdrop }} style={styles.heroImage} resizeMode="cover" />
+          ) : (
+            <View style={[styles.heroImage, { backgroundColor: Colors.bgCard2 }]} />
+          )}
+          <LinearGradient
+            colors={['rgba(10,10,10,0)', 'rgba(10,10,10,0.5)', Colors.bg]}
+            locations={[0.15, 0.6, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+
+        {/* ── Poster + Title Row ───────────────────────────────── */}
+        <View style={styles.titleRow}>
+          {/* Poster */}
           {poster ? (
-            <Image source={{ uri: poster }} style={styles.poster} />
+            <Image source={{ uri: poster }} style={styles.poster} resizeMode="cover" />
           ) : (
             <View style={[styles.poster, styles.posterFallback]}>
-              <Text style={styles.posterEmoji}>🎬</Text>
+              <Text style={{ fontSize: 32 }}>🎬</Text>
             </View>
           )}
 
-          <View style={styles.meta}>
-            <Text style={styles.title} numberOfLines={2}>{title}</Text>
-            <View style={styles.metaRow}>
-              <Text style={styles.rating}>⭐ {rating}</Text>
-              {year ? <Text style={styles.metaText}>{year}</Text> : null}
-              {runtime ? <Text style={styles.metaText}>{runtime}</Text> : null}
-            </View>
-            {genres ? <Text style={styles.genres}>{genres}</Text> : null}
-          </View>
-        </View>
-      </View>
+          {/* Text info */}
+          <View style={styles.titleCol}>
+            <Text style={styles.movieTitle} numberOfLines={3}>{title}</Text>
 
-      {loading ? (
-        <ActivityIndicator color={Colors.red} size="large" style={styles.loader} />
-      ) : error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : (
-        <View style={styles.body}>
-          {detail?.tagline ? (
-            <Text style={styles.tagline}>"{detail.tagline}"</Text>
-          ) : null}
-
-          {detail?.overview ? (
-            <Text style={styles.overview}>{detail.overview}</Text>
-          ) : null}
-
-          <View style={styles.infoGrid}>
-            {detail?.status ? (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Status</Text>
-                <Text style={styles.infoValue}>{detail.status}</Text>
-              </View>
-            ) : null}
-            {detail?.budget ? (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Budget</Text>
-                <Text style={styles.infoValue}>{formatMoney(detail.budget)}</Text>
-              </View>
-            ) : null}
-            {detail?.revenue ? (
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Revenue</Text>
-                <Text style={styles.infoValue}>{formatMoney(detail.revenue)}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          {cast.length > 0 ? (
-            <View style={styles.castSection}>
-              <Text style={styles.sectionTitle}>Top Cast</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {cast.map((person) => {
-                  const profile = imgUrl(person.profile_path, 'w185');
-                  return (
-                    <View key={person.id} style={styles.castCard}>
-                      {profile ? (
-                        <Image source={{ uri: profile }} style={styles.castImg} />
-                      ) : (
-                        <View style={[styles.castImg, styles.castFallback]}>
-                          <Text style={styles.castEmoji}>👤</Text>
-                        </View>
-                      )}
-                      <Text style={styles.castName} numberOfLines={1}>
-                        {person.name}
-                      </Text>
-                      <Text style={styles.castRole} numberOfLines={1}>
-                        {person.character}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          <View style={styles.trailerSection}>
-            <Text style={styles.sectionTitle}>Trailer</Text>
-            {trailerUrl ? (
-              <TouchableOpacity
-                style={styles.trailerCard}
-                onPress={() => setTrailerOpen((prev) => !prev)}
-                activeOpacity={0.85}
-              >
-                {backdrop ? (
-                  <Image source={{ uri: backdrop }} style={styles.trailerPoster} />
-                ) : (
-                  <View style={styles.trailerPosterFallback} />
-                )}
-                <View style={styles.trailerOverlay} />
-                <View style={styles.trailerPlay}>
-                  <View style={styles.trailerPlayCircle}>
-                    <Text style={styles.trailerPlayIcon}>▶</Text>
-                  </View>
+            {/* Rating · Year · Runtime */}
+            <View style={styles.pillRow}>
+              {rating && (
+                <View style={[styles.ratingPill, { borderColor: ratingColor }]}>
+                  <Text style={styles.ratingStar}>⭐</Text>
+                  <Text style={[styles.ratingVal, { color: ratingColor }]}>{rating}</Text>
                 </View>
-                <Text style={styles.trailerCardText}>
-                  {Platform.OS === 'web' && trailerOpen ? 'Hide Trailer' : 'Play Trailer'}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.trailerFallback}>
-                <Text style={styles.trailerFallbackText}>Trailer not available.</Text>
+              )}
+              {year ? <Text style={styles.metaPill}>{year}</Text> : null}
+              {runtime ? <Text style={styles.metaPill}>{runtime}</Text> : null}
+            </View>
+
+            {/* Genres */}
+            {genres.length > 0 && (
+              <View style={styles.genreRow}>
+                {genres.slice(0, 3).map((g) => (
+                  <View key={g.id} style={styles.genreChip}>
+                    <Text style={styles.genreChipText}>{g.name}</Text>
+                  </View>
+                ))}
               </View>
             )}
-            {Platform.OS === 'web' && trailerOpen && trailerUrl ? (
-              <View style={styles.trailerInlineFrame}>
-                {React.createElement('iframe', {
-                  src: trailerUrl,
-                  title: `${title} trailer`,
-                  style: styles.trailerWebFrame,
-                  frameBorder: '0',
-                  allow:
-                    'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
-                  allowFullScreen: true,
-                })}
-              </View>
-            ) : null}
+
+            {/* My List Button */}
+            <TouchableOpacity
+              style={styles.listBtn}
+              onPress={() => (inList ? removeFromList(detail.id) : addToList(detail))}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={inList ? ['#2a2a2a', '#1a1a1a'] : [Colors.red, Colors.redDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.listBtnGrad}
+              >
+                <Text style={styles.listBtnText}>{inList ? '✓  In My List' : '+  My List'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
-      )}
 
-      <View style={{ height: 24 }} />
-    </>
-  );
+        {/* ── Tagline ──────────────────────────────────────────── */}
+        {tagline ? <Text style={styles.tagline}>"{tagline}"</Text> : null}
 
-  return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+        {/* ── Overview ─────────────────────────────────────────── */}
+        {overview ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <View style={styles.sectionBar} />
+              <Text style={styles.sectionLabel}>Overview</Text>
+            </View>
+            <Text style={styles.overviewText}>{overview}</Text>
+          </View>
+        ) : null}
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {content}
-      </ScrollView>
+        {/* ── Trailer ──────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionHead}>
+            <View style={styles.sectionBar} />
+            <Text style={styles.sectionLabel}>Trailer</Text>
+          </View>
+          {trailer?.key ? (
+            <InlineTrailer trailerKey={trailer.key} title={title} />
+          ) : (
+            <View style={styles.noTrailer}>
+              <Text style={styles.noTrailerText}>No trailer available</Text>
+            </View>
+          )}
+        </View>
 
-      {trailerOpen && Platform.OS !== 'web' ? (
-        <Modal
-          visible={trailerOpen}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setTrailerOpen(false)}
-        >
-          <View style={styles.trailerModalBackdrop}>
-            <View style={styles.trailerModalCard}>
-              <TouchableOpacity
-                style={styles.trailerClose}
-                onPress={() => setTrailerOpen(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.trailerCloseText}>✕</Text>
-              </TouchableOpacity>
-
-              {trailerUrl ? (
-                <WebView
-                  source={{ uri: trailerUrl }}
-                  style={styles.trailerModalWebView}
-                  allowsFullscreenVideo
-                  mediaPlaybackRequiresUserAction
-                />
-              ) : null}
+        {/* ── Details Grid ─────────────────────────────────────── */}
+        {(status || budget || revenue || langs) ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <View style={styles.sectionBar} />
+              <Text style={styles.sectionLabel}>Details</Text>
+            </View>
+            <View style={styles.detailGrid}>
+              {status   ? <DetailCard label="Status"   value={status} /> : null}
+              {budget   ? <DetailCard label="Budget"   value={budget} /> : null}
+              {revenue  ? <DetailCard label="Revenue"  value={revenue} /> : null}
+              {langs    ? <DetailCard label="Language" value={langs} /> : null}
             </View>
           </View>
-        </Modal>
-      ) : null}
+        ) : null}
+
+        {/* ── Cast ─────────────────────────────────────────────── */}
+        {cast.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHead}>
+              <View style={styles.sectionBar} />
+              <Text style={styles.sectionLabel}>Top Cast</Text>
+            </View>
+            <FlatList
+              data={cast}
+              keyExtractor={(p) => String(p.id)}
+              renderItem={({ item }) => <CastCard person={item} />}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.castRow}
+              nestedScrollEnabled={true}
+            />
+          </View>
+        ) : null}
+
+        <View style={{ height: insets.bottom + 40 }} />
+      </ScrollView>
     </View>
   );
 }
+
+// ─── Small Sub-Components ─────────────────────────────────────────
+
+function DetailCard({ label, value }) {
+  return (
+    <View style={styles.detailCard}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
+function CastCard({ person }) {
+  const photo = imgUrl(person.profile_path, 'w185');
+  return (
+    <View style={styles.castCard}>
+      {photo ? (
+        <Image source={{ uri: photo }} style={styles.castPhoto} />
+      ) : (
+        <View style={[styles.castPhoto, styles.castPhotoEmpty]}>
+          <Text style={{ fontSize: 20 }}>👤</Text>
+        </View>
+      )}
+      <Text style={styles.castName} numberOfLines={2}>{person.name}</Text>
+      <Text style={styles.castChar} numberOfLines={1}>{person.character}</Text>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.bg,
-    ...(Platform.OS === 'web' ? { height: '100vh' } : {}),
   },
-  scroll: {
+  centered: {
     flex: 1,
+    backgroundColor: Colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
-  scrollContent: {
-    paddingBottom: 24,
-    flexGrow: 1,
+  loadingLabel: {
+    color: Colors.textMuted,
+    fontSize: 13,
+    marginTop: 8,
   },
-  heroWrap: {
-    position: 'relative',
-    height: 280,
-    marginBottom: 10,
+  errorMsg: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 32,
   },
-  backdrop: {
-    width,
-    height: 280,
-    backgroundColor: Colors.bgCard,
-  },
-  backdropFallback: {
-    backgroundColor: Colors.bgCard2,
-  },
+
+  // Back button
   backBtn: {
     position: 'absolute',
     left: 16,
-    width: 38,
-    height: 38,
+    zIndex: 99,
+    width: 40,
+    height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     borderWidth: 1,
     borderColor: Colors.dividerStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backIcon: {
+  backBtnText: {
     color: Colors.white,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
+    lineHeight: 22,
   },
-  heroContent: {
-    position: 'absolute',
-    bottom: -30,
-    left: 18,
-    right: 18,
+
+  // ScrollView
+  scroller: {
+    flex: 1,
+  },
+  scrollerContent: {
+    paddingBottom: 32,
+  },
+
+  // Hero
+  hero: {
+    height: HERO_H,
+    width: '100%',
+    backgroundColor: Colors.bgCard,
+  },
+  heroImage: {
+    width: '100%',
+    height: HERO_H,
+  },
+
+  // Poster + title
+  titleRow: {
     flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginTop: -(POSTER_H / 2),
     gap: 14,
+    alignItems: 'flex-end',
   },
   poster: {
-    width: POSTER_WIDTH,
-    height: POSTER_HEIGHT,
-    borderRadius: 12,
+    width: POSTER_W,
+    height: POSTER_H,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: Colors.dividerStrong,
     backgroundColor: Colors.bgCard,
   },
   posterFallback: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
   },
-  posterEmoji: {
-    fontSize: 30,
-  },
-  meta: {
+  titleCol: {
     flex: 1,
-    justifyContent: 'flex-end',
-    paddingBottom: 6,
+    gap: 8,
+    paddingBottom: 4,
   },
-  title: {
+  movieTitle: {
     color: Colors.white,
     fontSize: 22,
     fontWeight: '800',
-    marginBottom: 6,
+    lineHeight: 28,
+    letterSpacing: 0.2,
   },
-  metaRow: {
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'center',
+  },
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  ratingStar: { fontSize: 11 },
+  ratingVal: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  metaPill: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: Colors.bgCard2,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.dividerStrong,
+  },
+  genreRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  genreChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: Colors.redLight,
+    borderWidth: 1,
+    borderColor: Colors.redGlow,
+  },
+  genreChipText: {
+    color: Colors.red,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  listBtn: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  listBtnGrad: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  listBtnText: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+
+  // Tagline
+  tagline: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: 20,
+    marginHorizontal: 24,
+    lineHeight: 20,
+  },
+
+  // Sections
+  section: {
+    marginTop: 28,
+    paddingHorizontal: 16,
+  },
+  sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 6,
+    marginBottom: 14,
   },
-  rating: {
-    color: Colors.gold,
-    fontSize: 13,
-    fontWeight: '700',
+  sectionBar: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Colors.red,
   },
-  metaText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  genres: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-  },
-  loader: {
-    marginTop: 60,
-  },
-  errorBox: {
-    marginHorizontal: 18,
-    marginTop: 50,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(229,57,53,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(229,57,53,0.3)',
-  },
-  errorText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  body: {
-    paddingTop: 48,
-    paddingHorizontal: 18,
-  },
-  tagline: {
-    color: Colors.textSecondary,
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  overview: {
+  sectionLabel: {
     color: Colors.white,
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 18,
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 18,
-  },
-  infoItem: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.bgCard2,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-  },
-  infoLabel: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    marginBottom: 6,
-  },
-  infoValue: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  castSection: {
-    marginTop: 6,
-  },
-  sectionTitle: {
-    color: Colors.white,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
-    marginBottom: 12,
+    letterSpacing: 0.3,
   },
-  trailerSection: {
-    marginTop: 22,
+
+  // Overview
+  overviewText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
   },
-  trailerCard: {
-    height: 210,
+
+  // Trailer
+  trailerBox: {
+    width: '100%',
+    height: TRAILER_H,
     borderRadius: 14,
     overflow: 'hidden',
+    backgroundColor: '#000',
     borderWidth: 1,
     borderColor: Colors.dividerStrong,
-    backgroundColor: Colors.bgCard,
-    justifyContent: 'flex-end',
   },
-  trailerPoster: {
-    ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  trailerPosterFallback: {
-    ...StyleSheet.absoluteFillObject,
+  noTrailer: {
+    height: 120,
+    borderRadius: 14,
     backgroundColor: Colors.bgCard2,
+    borderWidth: 1,
+    borderColor: Colors.dividerStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noTrailerText: {
+    color: Colors.textMuted,
+    fontSize: 13,
   },
   trailerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.38)',
   },
-  trailerPlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trailerPlayCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-  },
-  trailerPlayIcon: {
-    color: Colors.white,
-    fontSize: 18,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-  trailerCardText: {
-    color: Colors.white,
-    fontSize: 12,
-    fontWeight: '700',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  trailerFallback: {
-    height: 210,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-    backgroundColor: Colors.bgCard2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trailerFallbackText: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-  },
-  trailerInlineFrame: {
-    marginTop: 12,
-    height: 360,
-    borderRadius: 14,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-    backgroundColor: Colors.bgCard,
-  },
-  trailerModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-  },
-  trailerModalCard: {
-    width: '100%',
-    maxWidth: 720,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: Colors.bgCard,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-  },
-  trailerModalWebView: {
-    height: 360,
-    backgroundColor: Colors.bgCard,
-  },
-  trailerClose: {
+  playCircle: {
     position: 'absolute',
-    right: 10,
-    top: 10,
-    zIndex: 2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    top: '50%',
+    left: '50%',
+    // translateX/Y done via marginLeft/marginTop since % transforms are web-only
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderWidth: 2,
+    borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: -30,
+    marginTop: -30,
+  },
+  playIcon: {
+    color: Colors.white,
+    fontSize: 22,
+    marginLeft: 3,
+  },
+  trailerLabel: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  trailerLabelText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+
+
+  // Details
+  detailGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  detailCard: {
+    flex: 1,
+    minWidth: '44%',
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.bgCard2,
     borderWidth: 1,
     borderColor: Colors.dividerStrong,
   },
-  trailerCloseText: {
+  detailLabel: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  detailValue: {
     color: Colors.white,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
   },
-  trailerWebFrame: {
-    width: '100%',
-    height: '100%',
-    borderWidth: 0,
+
+  // Cast
+  castRow: {
+    gap: 12,
+    paddingRight: 4,
   },
   castCard: {
-    width: 92,
-    marginRight: 12,
+    width: 84,
+    alignItems: 'center',
   },
-  castImg: {
-    width: 92,
-    height: 120,
-    borderRadius: 10,
+  castPhoto: {
+    width: 72,
+    height: 96,
+    borderRadius: 12,
     backgroundColor: Colors.bgCard,
+    marginBottom: 6,
   },
-  castFallback: {
+  castPhotoEmpty: {
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dividerStrong,
-  },
-  castEmoji: {
-    fontSize: 20,
   },
   castName: {
     color: Colors.white,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  castRole: {
-    color: Colors.textMuted,
     fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 14,
+    marginBottom: 2,
+  },
+  castChar: {
+    color: Colors.textMuted,
+    fontSize: 10,
+    textAlign: 'center',
   },
 });
