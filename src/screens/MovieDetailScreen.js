@@ -255,7 +255,9 @@ export default function MovieDetailScreen({ navigation, route }) {
                 )}
                 <View style={styles.trailerOverlay} />
                 <View style={styles.trailerPlay}>
-                  <Text style={styles.trailerPlayIcon}>▶</Text>
+                  <View style={styles.trailerPlayCircle}>
+                    <Text style={styles.trailerPlayIcon}>▶</Text>
+                  </View>
                 </View>
                 <Text style={styles.trailerCardText}>
                   {Platform.OS === 'web' && trailerOpen ? 'Hide Trailer' : 'Play Trailer'}
@@ -336,7 +338,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.bg,
-    ...(Platform.OS === 'web' ? { height: '100vh' } : null),
+    ...(Platform.OS === 'web' ? { height: '100vh' } : {}),
   },
   scroll: {
     flex: 1,
@@ -518,10 +520,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   trailerPlay: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -24 }, { translateY: -24 }],
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trailerPlayCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,

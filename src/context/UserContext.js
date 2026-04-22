@@ -130,12 +130,14 @@ export function UserProvider({ children }) {
   const addToList = useCallback(
     async (movie) => {
       if (!user?.uid) return;
+      let updated;
       setMyList((prev) => {
         if (prev.find((m) => m.id === movie.id)) return prev;
         const next = [movie, ...prev];
-        saveCache(CACHE.MY_LIST, next);
+        updated = next;
         return next;
       });
+      if (updated) saveCache(CACHE.MY_LIST, updated);
       try {
         await fsAddToMyList(user.uid, movie);
       } catch (err) {
@@ -148,11 +150,13 @@ export function UserProvider({ children }) {
   const removeFromList = useCallback(
     async (movieId) => {
       if (!user?.uid) return;
+      let updated;
       setMyList((prev) => {
         const next = prev.filter((m) => m.id !== movieId);
-        saveCache(CACHE.MY_LIST, next);
+        updated = next;
         return next;
       });
+      if (updated) saveCache(CACHE.MY_LIST, updated);
       try {
         await fsRemoveFromMyList(user.uid, movieId);
       } catch (err) {
@@ -172,12 +176,14 @@ export function UserProvider({ children }) {
   const markWatched = useCallback(
     async (movie) => {
       if (!user?.uid) return;
+      let updated;
       setWatched((prev) => {
         if (prev.find((m) => m.id === movie.id)) return prev;
         const next = [movie, ...prev];
-        saveCache(CACHE.WATCHED, next);
+        updated = next;
         return next;
       });
+      if (updated) saveCache(CACHE.WATCHED, updated);
       try {
         await fsAddToWatched(user.uid, movie);
       } catch (err) {
@@ -190,11 +196,13 @@ export function UserProvider({ children }) {
   const removeFromWatched = useCallback(
     async (movieId) => {
       if (!user?.uid) return;
+      let updated;
       setWatched((prev) => {
         const next = prev.filter((m) => m.id !== movieId);
-        saveCache(CACHE.WATCHED, next);
+        updated = next;
         return next;
       });
+      if (updated) saveCache(CACHE.WATCHED, updated);
       try {
         await fsRemoveFromWatched(user.uid, movieId);
       } catch (err) {

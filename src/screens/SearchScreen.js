@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
-import { searchMulti, imgUrl } from '../api/tmdb';
+import { searchMulti } from '../api/tmdb';
 import MovieCard from '../components/home/MovieCard';
 
 export default function SearchScreen() {

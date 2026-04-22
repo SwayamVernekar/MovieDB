@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StatusBar,
   Switch,
-  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -19,9 +18,9 @@ import StatsBar from '../components/profile/StatsBar';
 import ProfileTabs from '../components/profile/ProfileTabs';
 import MovieListItem from '../components/profile/MovieListItem';
 
-
-const { width } = Dimensions.get('window');
 const COLUMN_GAP = 12;
+
+
 
 function EmptyState({ message }) {
   return (
