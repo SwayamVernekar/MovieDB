@@ -22,6 +22,10 @@ export default function MoviesScreen({ navigation }) {
     navigation.navigate('MovieDetail', { movieId: movie.id, movie });
   };
 
+  const handleSeeAll = ({ title, emoji, fetchType }) => {
+    navigation.navigate('SeeAll', { title, emoji, fetchType });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
@@ -33,6 +37,7 @@ export default function MoviesScreen({ navigation }) {
           movies={popular}
           loading={loadingP}
           onMoviePress={handleMoviePress}
+          onSeeAll={() => handleSeeAll({ title: 'Popular Movies', emoji: '🎬', fetchType: 'popular' })}
         />
         <SectionRow
           title="Top Rated"
@@ -40,6 +45,7 @@ export default function MoviesScreen({ navigation }) {
           movies={topRated}
           loading={loadingT}
           onMoviePress={handleMoviePress}
+          onSeeAll={() => handleSeeAll({ title: 'Top Rated', emoji: '⭐', fetchType: 'topRated' })}
         />
         <View style={{ height: 24 }} />
       </ScrollView>

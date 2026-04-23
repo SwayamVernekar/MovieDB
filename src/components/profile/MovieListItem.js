@@ -11,11 +11,13 @@ import { Colors } from '../../theme/colors';
 import { imgUrl } from '../../api/tmdb';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 18 * 2 - 12) / 2;
-const CARD_HEIGHT = CARD_WIDTH * 1.4;
 
-export default function MovieListItem({ movie, onRemove }) {
+export default function MovieListItem({ movie, onRemove, cardWidth }) {
   if (!movie) return null;
+
+  // Use provided width or fallback to a default (e.g. 130)
+  const W = cardWidth || 130;
+  const H = W * 1.4;
 
   const imageUri = imgUrl(movie.poster_path, 'w342');
   const title = movie.title || movie.name || '';
@@ -24,9 +26,9 @@ export default function MovieListItem({ movie, onRemove }) {
   const genre = movie.genre_names ? movie.genre_names[0] : '';
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { width: W }]}>
       {/* Poster card */}
-      <View style={styles.card}>
+      <View style={[styles.card, { width: W, height: H }]}>
         {imageUri ? (
           <Image
             source={{ uri: imageUri }}
@@ -66,12 +68,9 @@ export default function MovieListItem({ movie, onRemove }) {
 
 const styles = StyleSheet.create({
   wrapper: {
-    width: CARD_WIDTH,
     marginBottom: 16,
   },
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: Colors.bgCard,

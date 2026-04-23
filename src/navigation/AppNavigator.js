@@ -21,7 +21,7 @@ import LoginScreen from '../screens/LoginScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import MainTabNavigator from './MainTabNavigator';
 import MovieDetailScreen from '../screens/MovieDetailScreen';
-import SeeAllScreen from '../screens/SeeAllScreen';
+import TVShowDetailScreen from '../screens/TVShowDetailScreen';
 import { Colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator();
@@ -64,8 +64,8 @@ function RootNavigator() {
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen
-            name="SeeAll"
-            component={SeeAllScreen}
+            name="TVShowDetail"
+            component={TVShowDetailScreen}
             options={{ animation: 'slide_from_right' }}
           />
         </>

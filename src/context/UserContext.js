@@ -212,6 +212,11 @@ export function UserProvider({ children }) {
     [user]
   );
 
+  const isWatched = useCallback(
+    (movieId) => watched.some((m) => m.id === movieId),
+    [watched]
+  );
+
   // ── Sign Out ─────────────────────────────────────────────────────
 
   const handleSignOut = useCallback(async () => {
@@ -245,6 +250,7 @@ export function UserProvider({ children }) {
         isInList,
         markWatched,
         removeFromWatched,
+        isWatched,
         signOut: handleSignOut,
       }}
     >

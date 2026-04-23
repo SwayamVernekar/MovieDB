@@ -85,3 +85,15 @@ export const getMoviesByGenre = (genreId, page = 1) =>
     sort_by: 'popularity.desc',
     page,
   });
+
+/** TV show details (includes seasons, networks, etc.) */
+export const getTVShowDetails = (tvId) =>
+  tmdbFetch(`/tv/${tvId}`);
+
+/** TV show credits */
+export const getTVShowCredits = (tvId) =>
+  tmdbFetch(`/tv/${tvId}/credits`);
+
+/** TV show videos (trailers, teasers) */
+export const getTVShowVideos = (tvId) =>
+  tmdbFetch(`/tv/${tvId}/videos`);

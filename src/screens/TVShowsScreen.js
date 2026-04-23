@@ -12,7 +12,7 @@ import { getPopularTV, getTrendingTV } from '../api/tmdb';
 import SectionRow from '../components/home/SectionRow';
 import { ScrollView } from 'react-native';
 
-export default function TVShowsScreen() {
+export default function TVShowsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [popular, setPopular] = useState([]);
   const [trending, setTrending] = useState([]);
@@ -24,13 +24,35 @@ export default function TVShowsScreen() {
     getTrendingTV().then((d) => { setTrending((d.results || []).slice(0, 10)); setLoadingT(false); });
   }, []);
 
+  const handlePress = (show) => {
+    navigation.navigate('TVShowDetail', { tvId: show.id, show });
+  };
+
+  const handleSeeAll = ({ title, emoji, fetchType }) => {
+    navigation.navigate('SeeAll', { title, emoji, fetchType });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
       <Text style={styles.title}>TV Shows</Text>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <SectionRow title="Popular TV Shows" emoji="📺" movies={popular} loading={loadingP} />
-        <SectionRow title="Trending TV" emoji="🔥" movies={trending} loading={loadingT} />
+        <SectionRow
+          title="Popular TV Shows"
+          emoji="📺"
+          movies={popular}
+          loading={loadingP}
+          onMoviePress={handlePress}
+          onSeeAll={() => handleSeeAll({ title: 'Popular TV Shows', emoji: '📺', fetchType: 'popularTV' })}
+        />
+        <SectionRow
+          title="Trending TV"
+          emoji="🔥"
+          movies={trending}
+          loading={loadingT}
+          onMoviePress={handlePress}
+          onSeeAll={() => handleSeeAll({ title: 'Trending TV', emoji: '🔥', fetchType: 'trendingTV' })}
+        />
         <View style={{ height: 24 }} />
       </ScrollView>
     </View>

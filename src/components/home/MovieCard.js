@@ -15,8 +15,11 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = 130;
 const CARD_HEIGHT = 185;
 
-export default function MovieCard({ movie, onPress, showYear }) {
+export default function MovieCard({ movie, onPress, showYear, cardWidth }) {
   if (!movie) return null;
+
+  const W = cardWidth || CARD_WIDTH;
+  const H = Math.round(W * (CARD_HEIGHT / CARD_WIDTH));
 
   const imageUri = imgUrl(movie.poster_path, 'w342');
   const title = movie.title || movie.name || '';
@@ -25,15 +28,15 @@ export default function MovieCard({ movie, onPress, showYear }) {
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { width: W }, cardWidth ? { marginRight: 0 } : null]}
       onPress={() => onPress && onPress(movie)}
       activeOpacity={0.85}
     >
       {/* Poster */}
       {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.poster} resizeMode="cover" />
+        <Image source={{ uri: imageUri }} style={[styles.poster, { width: W, height: H }]} resizeMode="cover" />
       ) : (
-        <View style={[styles.poster, styles.posterFallback]}>
+        <View style={[styles.poster, styles.posterFallback, { width: W, height: H }]}>
           <Text style={styles.fallbackText}>🎬</Text>
         </View>
       )}
@@ -54,7 +57,7 @@ export default function MovieCard({ movie, onPress, showYear }) {
       )}
 
       {/* Title & year below card */}
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.title, { width: W }]} numberOfLines={1}>{title}</Text>
       {showYear && year ? (
         <Text style={styles.year}>{year}</Text>
       ) : null}

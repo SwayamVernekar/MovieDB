@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
-  Animated,
   Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,36 +19,15 @@ import { Colors } from '../theme/colors';
 import {
   backdropUrl,
   imgUrl,
-  getMovieCredits,
-  getMovieDetails,
-  getMovieVideos,
+  getTVShowDetails,
+  getTVShowCredits,
+  getTVShowVideos,
 } from '../api/tmdb';
 import { useUser } from '../context/UserContext';
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-function formatRuntime(mins) {
-  if (!mins || isNaN(mins)) return null;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function formatMoney(val) {
-  if (!val || isNaN(val) || val === 0) return null;
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0,
-    }).format(val);
-  } catch {
-    return `$${val.toLocaleString()}`;
-  }
-}
-
 function pickTrailer(videos = []) {
-  if (!videos.length) return null;
   const yt = (v) => v?.site === 'YouTube' && v?.key;
   return (
     videos.find((v) => yt(v) && v.type === 'Trailer' && v.official) ||
@@ -66,17 +44,10 @@ const HERO_H = 280;
 const POSTER_W = 110;
 const POSTER_H = 165;
 
-// ─── Inline Trailer ──────────────────────────────────────────────
-//
-// Web   → <iframe> embedded directly. Always works.
-// Native → YouTube thumbnail card. Tapping opens the YouTube app
-//           (or browser). This is the only reliable approach in
-//           Expo Go — YouTube blocks WebView embedding on mobile.
-
+// ─── Inline Trailer (same pattern as MovieDetailScreen) ──────────
 function InlineTrailer({ trailerKey, title }) {
   const embedUrl = `https://www.youtube.com/embed/${trailerKey}?controls=1&modestbranding=1&playsinline=1&rel=0`;
   const watchUrl = `https://www.youtube.com/watch?v=${trailerKey}`;
-  // YouTube always has a maxresdefault thumbnail; fall back to hqdefault
   const thumbUrl = `https://img.youtube.com/vi/${trailerKey}/hqdefault.jpg`;
 
   if (Platform.OS === 'web') {
@@ -89,20 +60,13 @@ function InlineTrailer({ trailerKey, title }) {
           allow:
             'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
           allowFullScreen: true,
-          style: {
-            width: '100%',
-            height: '100%',
-            border: 'none',
-            display: 'block',
-          },
+          style: { width: '100%', height: '100%', border: 'none', display: 'block' },
         })}
       </View>
     );
   }
 
-  // Native: thumbnail + play button → opens YouTube app / browser
   const openYouTube = () => {
-    // Try deep-link into YouTube app first, fall back to browser
     const appUrl = `youtube://watch?v=${trailerKey}`;
     Linking.canOpenURL(appUrl)
       .then((can) => Linking.openURL(can ? appUrl : watchUrl))
@@ -110,23 +74,12 @@ function InlineTrailer({ trailerKey, title }) {
   };
 
   return (
-    <TouchableOpacity
-      style={styles.trailerBox}
-      onPress={openYouTube}
-      activeOpacity={0.88}
-    >
-      <Image
-        source={{ uri: thumbUrl }}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-      />
-      {/* Dark overlay */}
+    <TouchableOpacity style={styles.trailerBox} onPress={openYouTube} activeOpacity={0.88}>
+      <Image source={{ uri: thumbUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       <View style={styles.trailerOverlay} />
-      {/* Play circle */}
       <View style={styles.playCircle}>
         <Text style={styles.playIcon}>▶</Text>
       </View>
-      {/* "Tap to watch" label */}
       <View style={styles.trailerLabel}>
         <Text style={styles.trailerLabelText}>Tap to watch trailer</Text>
       </View>
@@ -134,69 +87,67 @@ function InlineTrailer({ trailerKey, title }) {
   );
 }
 
-// ─── Main Screen ─────────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────
 
-export default function MovieDetailScreen({ navigation, route }) {
+export default function TVShowDetailScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { addToList, removeFromList, isInList, markWatched, removeFromWatched, isWatched } = useUser();
 
   const params = route?.params || {};
-  const movieId = params.movieId ?? params.movie?.id;
+  const tvId = params.tvId ?? params.show?.id ?? params.movieId;
 
-  const [detail, setDetail] = useState(params.movie || null);
+  const [detail, setDetail] = useState(params.show || params.movie || null);
   const [credits, setCredits] = useState(null);
   const [trailer, setTrailer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ── Fetch ──────────────────────────────────────────────────────
   useEffect(() => {
     let live = true;
-    async function fetch() {
-      if (!movieId) {
-        setError('Movie not found.');
-        setLoading(false);
-        return;
-      }
+    async function load() {
+      if (!tvId) { setError('TV show not found.'); setLoading(false); return; }
       setLoading(true);
       setError(null);
       try {
         const [det, cred, vids] = await Promise.all([
-          getMovieDetails(movieId),
-          getMovieCredits(movieId),
-          getMovieVideos(movieId),
+          getTVShowDetails(tvId),
+          getTVShowCredits(tvId),
+          getTVShowVideos(tvId),
         ]);
         if (!live) return;
         setDetail(det);
         setCredits(cred);
         setTrailer(pickTrailer(vids?.results || []));
       } catch {
-        if (live) setError('Could not load movie details.');
+        if (live) setError('Could not load TV show details.');
       } finally {
         if (live) setLoading(false);
       }
     }
-    fetch();
+    load();
     return () => { live = false; };
-  }, [movieId]);
+  }, [tvId]);
 
   // ── Derived ────────────────────────────────────────────────────
-  const title    = detail?.title || detail?.name || 'Movie';
-  const tagline  = detail?.tagline || '';
-  const overview = detail?.overview || '';
-  const rating   = detail?.vote_average ? detail.vote_average.toFixed(1) : null;
-  const year     = (detail?.release_date || detail?.first_air_date || '').slice(0, 4);
-  const runtime  = formatRuntime(detail?.runtime);
-  const genres   = detail?.genres || [];
-  const budget   = formatMoney(detail?.budget);
-  const revenue  = formatMoney(detail?.revenue);
-  const status   = detail?.status || null;
-  const langs    = (detail?.spoken_languages || []).map((l) => l.english_name).join(', ') || null;
-  const cast     = useMemo(() => (credits?.cast || []).slice(0, 12), [credits]);
-  const backdrop = backdropUrl(detail?.backdrop_path) || imgUrl(detail?.poster_path, 'w780');
-  const poster   = imgUrl(detail?.poster_path, 'w342');
-  const inList   = detail ? isInList(detail.id) : false;
-  const hasWatched = detail ? isWatched(detail.id) : false;
+  const name        = detail?.name || detail?.original_name || 'TV Show';
+  const tagline     = detail?.tagline || '';
+  const overview    = detail?.overview || '';
+  const rating      = detail?.vote_average ? detail.vote_average.toFixed(1) : null;
+  const firstAir    = (detail?.first_air_date || '').slice(0, 4);
+  const lastAir     = (detail?.last_air_date || '').slice(0, 4);
+  const airRange    = firstAir && lastAir && firstAir !== lastAir ? `${firstAir}–${lastAir}` : firstAir;
+  const seasons     = detail?.number_of_seasons;
+  const episodes    = detail?.number_of_episodes;
+  const status      = detail?.status || null;
+  const genres      = detail?.genres || [];
+  const networks    = (detail?.networks || []).map((n) => n.name).join(', ') || null;
+  const createdBy   = (detail?.created_by || []).map((c) => c.name).join(', ') || null;
+  const langs       = (detail?.spoken_languages || []).map((l) => l.english_name).join(', ') || null;
+  const cast        = useMemo(() => (credits?.cast || []).slice(0, 12), [credits]);
+  const backdrop    = backdropUrl(detail?.backdrop_path) || imgUrl(detail?.poster_path, 'w780');
+  const poster      = imgUrl(detail?.poster_path, 'w342');
+  const inList      = detail ? isInList(detail.id) : false;
+  const hasWatched  = detail ? isWatched(detail.id) : false;
 
   const ratingColor =
     rating && parseFloat(rating) >= 7.5
@@ -205,7 +156,6 @@ export default function MovieDetailScreen({ navigation, route }) {
       ? Colors.gold
       : '#FF7043';
 
-  // ── Shared back button (always rendered so user can go back) ───
   const BackBtn = () => (
     <TouchableOpacity
       style={[styles.backBtn, { top: insets.top + 12 }]}
@@ -240,16 +190,13 @@ export default function MovieDetailScreen({ navigation, route }) {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-
       <ScrollView
         style={styles.scroller}
         contentContainerStyle={styles.scrollerContent}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
       >
-        {/* Back button — inside ScrollView so it is part of scrollable area,
-            but positioned absolutely so it floats above content */}
         <BackBtn />
+
         {/* ── Hero ─────────────────────────────────────────────── */}
         <View style={styles.hero}>
           {backdrop ? (
@@ -262,24 +209,26 @@ export default function MovieDetailScreen({ navigation, route }) {
             locations={[0.15, 0.6, 1]}
             style={StyleSheet.absoluteFill}
           />
+          {/* TV Show badge */}
+          <View style={styles.tvBadge}>
+            <Text style={styles.tvBadgeText}>📺 TV SHOW</Text>
+          </View>
         </View>
 
         {/* ── Poster + Title Row ───────────────────────────────── */}
         <View style={styles.titleRow}>
-          {/* Poster */}
           {poster ? (
             <Image source={{ uri: poster }} style={styles.poster} resizeMode="cover" />
           ) : (
             <View style={[styles.poster, styles.posterFallback]}>
-              <Text style={{ fontSize: 32 }}>🎬</Text>
+              <Text style={{ fontSize: 32 }}>📺</Text>
             </View>
           )}
 
-          {/* Text info */}
           <View style={styles.titleCol}>
-            <Text style={styles.movieTitle} numberOfLines={3}>{title}</Text>
+            <Text style={styles.showTitle} numberOfLines={3}>{name}</Text>
 
-            {/* Rating · Year · Runtime */}
+            {/* Rating · Air dates */}
             <View style={styles.pillRow}>
               {rating && (
                 <View style={[styles.ratingPill, { borderColor: ratingColor }]}>
@@ -287,8 +236,13 @@ export default function MovieDetailScreen({ navigation, route }) {
                   <Text style={[styles.ratingVal, { color: ratingColor }]}>{rating}</Text>
                 </View>
               )}
-              {year ? <Text style={styles.metaPill}>{year}</Text> : null}
-              {runtime ? <Text style={styles.metaPill}>{runtime}</Text> : null}
+              {airRange ? <Text style={styles.metaPill}>{airRange}</Text> : null}
+              {seasons ? (
+                <Text style={styles.metaPill}>
+                  {seasons} {seasons === 1 ? 'Season' : 'Seasons'}
+                </Text>
+              ) : null}
+              {episodes ? <Text style={styles.metaPill}>{episodes} Eps</Text> : null}
             </View>
 
             {/* Genres */}
@@ -345,22 +299,16 @@ export default function MovieDetailScreen({ navigation, route }) {
         {/* ── Overview ─────────────────────────────────────────── */}
         {overview ? (
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <View style={styles.sectionBar} />
-              <Text style={styles.sectionLabel}>Overview</Text>
-            </View>
+            <SectionHead label="Overview" />
             <Text style={styles.overviewText}>{overview}</Text>
           </View>
         ) : null}
 
         {/* ── Trailer ──────────────────────────────────────────── */}
         <View style={styles.section}>
-          <View style={styles.sectionHead}>
-            <View style={styles.sectionBar} />
-            <Text style={styles.sectionLabel}>Trailer</Text>
-          </View>
+          <SectionHead label="Trailer" />
           {trailer?.key ? (
-            <InlineTrailer trailerKey={trailer.key} title={title} />
+            <InlineTrailer trailerKey={trailer.key} title={name} />
           ) : (
             <View style={styles.noTrailer}>
               <Text style={styles.noTrailerText}>No trailer available</Text>
@@ -369,17 +317,16 @@ export default function MovieDetailScreen({ navigation, route }) {
         </View>
 
         {/* ── Details Grid ─────────────────────────────────────── */}
-        {(status || budget || revenue || langs) ? (
+        {(status || networks || createdBy || langs) ? (
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <View style={styles.sectionBar} />
-              <Text style={styles.sectionLabel}>Details</Text>
-            </View>
+            <SectionHead label="Details" />
             <View style={styles.detailGrid}>
-              {status   ? <DetailCard label="Status"   value={status} /> : null}
-              {budget   ? <DetailCard label="Budget"   value={budget} /> : null}
-              {revenue  ? <DetailCard label="Revenue"  value={revenue} /> : null}
-              {langs    ? <DetailCard label="Language" value={langs} /> : null}
+              {status     ? <DetailCard label="Status"     value={status} /> : null}
+              {networks   ? <DetailCard label="Network"    value={networks} /> : null}
+              {createdBy  ? <DetailCard label="Created By" value={createdBy} /> : null}
+              {langs      ? <DetailCard label="Language"   value={langs} /> : null}
+              {seasons    ? <DetailCard label="Seasons"    value={String(seasons)} /> : null}
+              {episodes   ? <DetailCard label="Episodes"   value={String(episodes)} /> : null}
             </View>
           </View>
         ) : null}
@@ -387,10 +334,7 @@ export default function MovieDetailScreen({ navigation, route }) {
         {/* ── Cast ─────────────────────────────────────────────── */}
         {cast.length > 0 ? (
           <View style={styles.section}>
-            <View style={styles.sectionHead}>
-              <View style={styles.sectionBar} />
-              <Text style={styles.sectionLabel}>Top Cast</Text>
-            </View>
+            <SectionHead label="Top Cast" />
             <FlatList
               data={cast}
               keyExtractor={(p) => String(p.id)}
@@ -398,7 +342,7 @@ export default function MovieDetailScreen({ navigation, route }) {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.castRow}
-              nestedScrollEnabled={true}
+              nestedScrollEnabled
             />
           </View>
         ) : null}
@@ -410,6 +354,15 @@ export default function MovieDetailScreen({ navigation, route }) {
 }
 
 // ─── Small Sub-Components ─────────────────────────────────────────
+
+function SectionHead({ label }) {
+  return (
+    <View style={styles.sectionHead}>
+      <View style={styles.sectionBar} />
+      <Text style={styles.sectionLabel}>{label}</Text>
+    </View>
+  );
+}
 
 function DetailCard({ label, value }) {
   return (
@@ -440,151 +393,78 @@ function CastCard({ person }) {
 // ─── Styles ───────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-  },
+  root: { flex: 1, backgroundColor: Colors.bg },
   centered: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    flex: 1, backgroundColor: Colors.bg,
+    alignItems: 'center', justifyContent: 'center', gap: 12,
   },
-  loadingLabel: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    marginTop: 8,
-  },
+  loadingLabel: { color: Colors.textMuted, fontSize: 13, marginTop: 8 },
   errorMsg: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 32,
+    color: Colors.textSecondary, fontSize: 14,
+    textAlign: 'center', paddingHorizontal: 32,
   },
 
   // Back button
   backBtn: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 99,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    position: 'absolute', left: 16, zIndex: 99,
+    width: 40, height: 40, borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.dividerStrong,
+    alignItems: 'center', justifyContent: 'center',
   },
-  backBtnText: {
-    color: Colors.white,
-    fontSize: 20,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
+  backBtnText: { color: Colors.white, fontSize: 20, fontWeight: '700', lineHeight: 22 },
 
   // ScrollView
-  scroller: {
-    flex: 1,
-  },
-  scrollerContent: {
-    paddingBottom: 32,
-  },
+  scroller: { flex: 1 },
+  scrollerContent: { paddingBottom: 32 },
 
   // Hero
-  hero: {
-    height: HERO_H,
-    width: '100%',
-    backgroundColor: Colors.bgCard,
+  hero: { height: HERO_H, width: '100%', backgroundColor: Colors.bgCard },
+  heroImage: { width: '100%', height: HERO_H },
+  tvBadge: {
+    position: 'absolute', bottom: 16, right: 16,
+    backgroundColor: 'rgba(229,57,53,0.9)',
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
   },
-  heroImage: {
-    width: '100%',
-    height: HERO_H,
-  },
+  tvBadgeText: { color: Colors.white, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
   // Poster + title
   titleRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginTop: -(POSTER_H / 2),
-    gap: 14,
-    alignItems: 'flex-end',
+    flexDirection: 'row', paddingHorizontal: 16,
+    marginTop: -(POSTER_H / 2), gap: 14, alignItems: 'flex-end',
   },
   poster: {
-    width: POSTER_W,
-    height: POSTER_H,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: Colors.dividerStrong,
+    width: POSTER_W, height: POSTER_H, borderRadius: 14,
+    borderWidth: 2, borderColor: Colors.dividerStrong,
     backgroundColor: Colors.bgCard,
   },
-  posterFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  posterFallback: { alignItems: 'center', justifyContent: 'center' },
+  titleCol: { flex: 1, gap: 8, paddingBottom: 4 },
+  showTitle: {
+    color: Colors.white, fontSize: 22, fontWeight: '800',
+    lineHeight: 28, letterSpacing: 0.2,
   },
-  titleCol: {
-    flex: 1,
-    gap: 8,
-    paddingBottom: 4,
-  },
-  movieTitle: {
-    color: Colors.white,
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 28,
-    letterSpacing: 0.2,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    alignItems: 'center',
-  },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
   ratingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8,
+    borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.04)',
   },
   ratingStar: { fontSize: 11 },
-  ratingVal: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
+  ratingVal: { fontSize: 13, fontWeight: '800' },
   metaPill: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    backgroundColor: Colors.bgCard2,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
+    color: Colors.textSecondary, fontSize: 12, fontWeight: '600',
+    backgroundColor: Colors.bgCard2, paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.dividerStrong,
   },
-  genreRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
+  genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   genreChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    backgroundColor: Colors.redLight,
-    borderWidth: 1,
-    borderColor: Colors.redGlow,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, backgroundColor: Colors.redLight,
+    borderWidth: 1, borderColor: Colors.redGlow,
   },
-  genreChipText: {
-    color: Colors.red,
-    fontSize: 11,
-    fontWeight: '700',
-  },
+  genreChipText: { color: Colors.red, fontSize: 11, fontWeight: '700' },
   actionBtnRow: {
     flexDirection: 'row',
     gap: 8,
@@ -608,171 +488,74 @@ const styles = StyleSheet.create({
 
   // Tagline
   tagline: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 20,
-    marginHorizontal: 24,
-    lineHeight: 20,
+    color: Colors.textSecondary, fontSize: 14, fontStyle: 'italic',
+    textAlign: 'center', marginTop: 20, marginHorizontal: 24, lineHeight: 20,
   },
 
   // Sections
-  section: {
-    marginTop: 28,
-    paddingHorizontal: 16,
-  },
+  section: { marginTop: 28, paddingHorizontal: 16 },
   sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
+    flexDirection: 'row', alignItems: 'center',
+    gap: 10, marginBottom: 14,
   },
-  sectionBar: {
-    width: 3,
-    height: 18,
-    borderRadius: 2,
-    backgroundColor: Colors.red,
-  },
-  sectionLabel: {
-    color: Colors.white,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
+  sectionBar: { width: 3, height: 18, borderRadius: 2, backgroundColor: Colors.red },
+  sectionLabel: { color: Colors.white, fontSize: 17, fontWeight: '800', letterSpacing: 0.3 },
 
   // Overview
-  overviewText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 22,
-  },
+  overviewText: { color: Colors.textSecondary, fontSize: 14, lineHeight: 22 },
 
   // Trailer
   trailerBox: {
-    width: '100%',
-    height: TRAILER_H,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#000',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
+    width: '100%', height: TRAILER_H, borderRadius: 14,
+    overflow: 'hidden', backgroundColor: '#000',
+    borderWidth: 1, borderColor: Colors.dividerStrong,
   },
   noTrailer: {
-    height: 120,
-    borderRadius: 14,
-    backgroundColor: Colors.bgCard2,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 120, borderRadius: 14, backgroundColor: Colors.bgCard2,
+    borderWidth: 1, borderColor: Colors.dividerStrong,
+    alignItems: 'center', justifyContent: 'center',
   },
-  noTrailerText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
-  trailerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.38)',
-  },
+  noTrailerText: { color: Colors.textMuted, fontSize: 13 },
+  trailerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
   playCircle: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    // translateX/Y done via marginLeft/marginTop since % transforms are web-only
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    position: 'absolute', top: '50%', left: '50%',
+    width: 60, height: 60, borderRadius: 30,
     backgroundColor: 'rgba(0,0,0,0.75)',
-    borderWidth: 2,
-    borderColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: -30,
-    marginTop: -30,
+    borderWidth: 2, borderColor: Colors.white,
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: -30, marginTop: -30,
   },
-  playIcon: {
-    color: Colors.white,
-    fontSize: 22,
-    marginLeft: 3,
-  },
-  trailerLabel: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  trailerLabelText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
+  playIcon: { color: Colors.white, fontSize: 22, marginLeft: 3 },
+  trailerLabel: { position: 'absolute', bottom: 12, left: 0, right: 0, alignItems: 'center' },
+  trailerLabelText: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
 
-
-  // Details
-  detailGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
+  // Details grid
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   detailCard: {
-    flex: 1,
-    minWidth: '44%',
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: Colors.bgCard2,
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
+    flex: 1, minWidth: '44%', padding: 14,
+    borderRadius: 14, backgroundColor: Colors.bgCard2,
+    borderWidth: 1, borderColor: Colors.dividerStrong,
   },
   detailLabel: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 6,
+    color: Colors.textMuted, fontSize: 11, fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6,
   },
-  detailValue: {
-    color: Colors.white,
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  detailValue: { color: Colors.white, fontSize: 13, fontWeight: '700' },
 
   // Cast
-  castRow: {
-    gap: 12,
-    paddingRight: 4,
-  },
-  castCard: {
-    width: 84,
-    alignItems: 'center',
-  },
+  castRow: { gap: 12, paddingRight: 4 },
+  castCard: { width: 84, alignItems: 'center' },
   castPhoto: {
-    width: 72,
-    height: 96,
-    borderRadius: 12,
-    backgroundColor: Colors.bgCard,
-    marginBottom: 6,
+    width: 72, height: 96, borderRadius: 12,
+    backgroundColor: Colors.bgCard, marginBottom: 6,
   },
   castPhotoEmpty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.dividerStrong,
   },
   castName: {
-    color: Colors.white,
-    fontSize: 11,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 14,
-    marginBottom: 2,
+    color: Colors.white, fontSize: 11, fontWeight: '700',
+    textAlign: 'center', lineHeight: 14, marginBottom: 2,
   },
-  castChar: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    textAlign: 'center',
-  },
+  castChar: { color: Colors.textMuted, fontSize: 10, textAlign: 'center' },
 });

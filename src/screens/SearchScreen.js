@@ -1,20 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
   FlatList,
-  TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
   StatusBar,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
 import { searchMulti } from '../api/tmdb';
 import MovieCard from '../components/home/MovieCard';
 
-export default function SearchScreen() {
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// Target ~130px cards (same as home screen), minimum 3 columns
+const SIDE_PAD = 16;
+const GAP = 10;
+const TARGET_CARD = 130;
+const NUM_COLS = Math.max(3, Math.floor((SCREEN_WIDTH - SIDE_PAD * 2 + GAP) / (TARGET_CARD + GAP)));
+// Actual card width so MovieCard fills each column exactly
+const CARD_WIDTH = (SCREEN_WIDTH - SIDE_PAD * 2 - GAP * (NUM_COLS - 1)) / NUM_COLS;
+
+export default function SearchScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -38,13 +49,27 @@ export default function SearchScreen() {
     return () => clearTimeout(timer);
   }, [query]);
 
+  const handlePress = useCallback(
+    (item) => {
+      if (item.media_type === 'tv') {
+        navigation?.navigate('TVShowDetail', { tvId: item.id, show: item });
+      } else {
+        navigation?.navigate('MovieDetail', { movieId: item.id, movie: item });
+      }
+    },
+    [navigation]
+  );
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+
+      {/* Title */}
       <Text style={styles.title}>Search</Text>
 
+      {/* Search bar */}
       <View style={styles.searchContainer}>
-        <Text style={styles.icon}>🔍</Text>
+        <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
           style={styles.input}
           placeholder="Search movies, series, shows..."
@@ -55,32 +80,46 @@ export default function SearchScreen() {
           returnKeyType="search"
         />
         {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')}>
+          <TouchableOpacity
+            onPress={() => setQuery('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={styles.clear}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
+      {/* States */}
       {loading ? (
-        <ActivityIndicator color={Colors.red} style={styles.loader} />
+        <View style={styles.center}>
+          <ActivityIndicator color={Colors.red} size="large" />
+          <Text style={styles.loadingText}>Searching…</Text>
+        </View>
       ) : results.length > 0 ? (
         <FlatList
           data={results}
           keyExtractor={(item) => String(item.id)}
-          numColumns={3}
+          numColumns={NUM_COLS}
+          contentContainerStyle={styles.grid}
           columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <MovieCard movie={item} showYear />
+            <MovieCard
+              movie={item}
+              onPress={handlePress}
+              showYear
+              cardWidth={CARD_WIDTH}
+            />
           )}
         />
       ) : query.length > 0 ? (
-        <View style={styles.empty}>
+        <View style={styles.center}>
+          <Text style={styles.emptyEmoji}>🔍</Text>
           <Text style={styles.emptyText}>No results for "{query}"</Text>
         </View>
       ) : (
-        <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>🔍</Text>
+        <View style={styles.center}>
+          <Text style={styles.emptyEmoji}>🎬</Text>
           <Text style={styles.emptyText}>Search for your favourite movies & shows</Text>
         </View>
       )}
@@ -94,8 +133,9 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 22,
     fontWeight: '900',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: SIDE_PAD,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -104,19 +144,37 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.dividerStrong,
-    marginHorizontal: 18,
+    marginHorizontal: SIDE_PAD,
     marginBottom: 16,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     gap: 10,
   },
-  icon: { fontSize: 15, opacity: 0.6 },
-  input: { flex: 1, color: Colors.white, fontSize: 14 },
+  searchIcon: { fontSize: 15, opacity: 0.6 },
+  input: { flex: 1, color: Colors.white, fontSize: 15 },
   clear: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
-  loader: { marginTop: 40 },
-  list: { paddingHorizontal: 18, paddingBottom: 20 },
-  row: { gap: 10, marginBottom: 10 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  emptyEmoji: { fontSize: 40 },
-  emptyText: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center', paddingHorizontal: 40 },
+  grid: {
+    paddingHorizontal: SIDE_PAD,
+    paddingBottom: 32,
+  },
+  row: {
+    gap: GAP,
+    marginBottom: GAP,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingBottom: 60,
+  },
+  loadingText: { color: Colors.textSecondary, fontSize: 14, marginTop: 8 },
+  emptyEmoji: { fontSize: 44 },
+  emptyText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 22,
+  },
 });

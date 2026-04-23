@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../theme/colors';
 
@@ -9,8 +10,42 @@ import SearchScreen from '../screens/SearchScreen';
 import TVShowsScreen from '../screens/TVShowsScreen';
 import MoviesScreen from '../screens/MoviesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import SeeAllScreen from '../screens/SeeAllScreen';
 
 const Tab = createBottomTabNavigator();
+const HomeStack = createNativeStackNavigator();
+
+// ─── Home Stack (keeps tab bar visible on SeeAll) ──────────────────────────────
+function HomeStackNavigator() {
+  return (
+    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+      <HomeStack.Screen name="HomeMain" component={HomeScreen} />
+      <HomeStack.Screen name="SeeAll" component={SeeAllScreen} options={{ animation: 'slide_from_right' }} />
+    </HomeStack.Navigator>
+  );
+}
+
+// ─── TV Shows Stack ────────────────────────────────────────────────────────────
+const TVStack = createNativeStackNavigator();
+function TVShowsStackNavigator() {
+  return (
+    <TVStack.Navigator screenOptions={{ headerShown: false }}>
+      <TVStack.Screen name="TVShowsMain" component={TVShowsScreen} />
+      <TVStack.Screen name="SeeAll" component={SeeAllScreen} options={{ animation: 'slide_from_right' }} />
+    </TVStack.Navigator>
+  );
+}
+
+// ─── Movies Stack ──────────────────────────────────────────────────────────────
+const MoviesStack = createNativeStackNavigator();
+function MoviesStackNavigator() {
+  return (
+    <MoviesStack.Navigator screenOptions={{ headerShown: false }}>
+      <MoviesStack.Screen name="MoviesMain" component={MoviesScreen} />
+      <MoviesStack.Screen name="SeeAll" component={SeeAllScreen} options={{ animation: 'slide_from_right' }} />
+    </MoviesStack.Navigator>
+  );
+}
 
 const TABS = [
   { name: 'Home',     icon: '🏠',  label: 'Home'     },
@@ -74,10 +109,10 @@ export default function MainTabNavigator() {
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen name="Home"    component={HomeScreen}    />
+      <Tab.Screen name="Home"    component={HomeStackNavigator} />
       <Tab.Screen name="Search"  component={SearchScreen}  />
-      <Tab.Screen name="TVShows" component={TVShowsScreen} />
-      <Tab.Screen name="Movies"  component={MoviesScreen}  />
+      <Tab.Screen name="TVShows" component={TVShowsStackNavigator} />
+      <Tab.Screen name="Movies"  component={MoviesStackNavigator}  />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

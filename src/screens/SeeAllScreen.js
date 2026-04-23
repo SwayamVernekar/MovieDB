@@ -18,47 +18,22 @@ import {
   getPopularMovies,
   getTopRatedMovies,
   getMoviesByGenre,
+  getTrendingTV,
+  getPopularTV,
 } from '../api/tmdb';
 
+import MovieCard from '../components/home/MovieCard';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const NUM_COLS = 3;
+
+// Target ~130px cards (same as home screen), minimum 3 columns
 const SIDE_PAD = 16;
 const GAP = 10;
-const ITEM_WIDTH = (SCREEN_WIDTH - SIDE_PAD * 2 - GAP * (NUM_COLS - 1)) / NUM_COLS;
-const ITEM_HEIGHT = ITEM_WIDTH * 1.52;
+const TARGET_CARD = 130;
+const NUM_COLS = Math.max(3, Math.floor((SCREEN_WIDTH - SIDE_PAD * 2 + GAP) / (TARGET_CARD + GAP)));
+// Actual card width so MovieCard fills each column exactly
+const CARD_WIDTH = (SCREEN_WIDTH - SIDE_PAD * 2 - GAP * (NUM_COLS - 1)) / NUM_COLS;
 
-// ─── Grid tile ────────────────────────────────────────────────────────────────
-function GridItem({ movie, onPress }) {
-  const uri = imgUrl(movie.poster_path, 'w342');
-  const title = movie.title || movie.name || '';
-  const rating = movie.vote_average ? movie.vote_average.toFixed(1) : null;
-
-  return (
-    <TouchableOpacity
-      style={styles.tile}
-      onPress={() => onPress(movie)}
-      activeOpacity={0.82}
-    >
-      {uri ? (
-        <Image source={{ uri }} style={styles.poster} resizeMode="cover" />
-      ) : (
-        <View style={[styles.poster, styles.posterFallback]}>
-          <Text style={styles.fallbackIcon}>🎬</Text>
-        </View>
-      )}
-
-      {rating && (
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingText}>⭐ {rating}</Text>
-        </View>
-      )}
-
-      <Text style={styles.tileTitle} numberOfLines={1}>
-        {title}
-      </Text>
-    </TouchableOpacity>
-  );
-}
 
 // ─── Fetch helper ─────────────────────────────────────────────────────────────
 function makeFetcher(fetchType, genreId) {
@@ -71,6 +46,10 @@ function makeFetcher(fetchType, genreId) {
       return (page) => getTopRatedMovies(page);
     case 'genre':
       return (page) => getMoviesByGenre(genreId, page);
+    case 'trendingTV':
+      return (page) => getTrendingTV(page);
+    case 'popularTV':
+      return (page) => getPopularTV(page);
     default:
       return (page) => getPopularMovies(page);
   }
@@ -126,7 +105,11 @@ export default function SeeAllScreen({ navigation, route }) {
   };
 
   const handleMoviePress = (movie) => {
-    navigation.navigate('MovieDetail', { movieId: movie.id, movie });
+    if (fetchType && fetchType.includes('TV')) {
+      navigation.navigate('TVShowDetail', { tvId: movie.id, show: movie });
+    } else {
+      navigation.navigate('MovieDetail', { movieId: movie.id, movie });
+    }
   };
 
   return (
@@ -188,7 +171,12 @@ export default function SeeAllScreen({ navigation, route }) {
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           renderItem={({ item }) => (
-            <GridItem movie={item} onPress={handleMoviePress} />
+            <MovieCard
+              movie={item}
+              onPress={handleMoviePress}
+              showYear
+              cardWidth={CARD_WIDTH}
+            />
           )}
           ListFooterComponent={
             loadingMore ? (
@@ -287,46 +275,6 @@ const styles = StyleSheet.create({
   row: {
     gap: GAP,
     marginBottom: GAP,
-  },
-  tile: {
-    width: ITEM_WIDTH,
-  },
-  poster: {
-    width: ITEM_WIDTH,
-    height: ITEM_HEIGHT,
-    borderRadius: 10,
-    backgroundColor: Colors.bgCard,
-    overflow: 'hidden',
-  },
-  posterFallback: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dividerStrong,
-  },
-  fallbackIcon: { fontSize: 28 },
-  ratingBadge: {
-    position: 'absolute',
-    top: 6,
-    left: 6,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(245,197,24,0.25)',
-  },
-  ratingText: {
-    color: Colors.gold,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  tileTitle: {
-    color: Colors.white,
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 6,
-    width: ITEM_WIDTH,
   },
 
   // Load more

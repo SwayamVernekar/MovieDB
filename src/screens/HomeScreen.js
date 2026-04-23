@@ -22,7 +22,6 @@ import {
 import { useUser } from '../context/UserContext';
 
 import Header from '../components/home/Header';
-import SearchBar from '../components/home/SearchBar';
 import GenreFilter from '../components/home/GenreFilter';
 import HeroBanner from '../components/home/HeroBanner';
 import SectionRow from '../components/home/SectionRow';
@@ -206,9 +205,6 @@ export default function HomeScreen({ navigation }) {
       >
         {/* Header */}
         <Header onProfilePress={handleProfilePress} />
-
-        {/* Search */}
-        <SearchBar />
 
         {/* Genre filter */}
         <GenreFilter

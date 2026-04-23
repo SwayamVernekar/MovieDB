@@ -1,27 +1,117 @@
+/**
+ * TrailerModal
+ * ─────────────────────────────────────────────────────────────────
+ * Platform-aware — mirrors the InlineTrailer approach in MovieDetailScreen:
+ *
+ *  Web    → <iframe> embedded YouTube player. Fades in over dark overlay.
+ *  Native → YouTube thumbnail + play button. Tapping opens the YouTube
+ *            app (deep-link) or browser. WebView is NOT used because
+ *            YouTube blocks embedding in WebView on mobile.
+ */
+
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Modal,
   View,
   Text,
+  Image,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
   Dimensions,
   StatusBar,
   Animated,
+  Platform,
+  Linking,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 import { getMovieVideos } from '../../api/tmdb';
 import { Colors } from '../../theme/colors';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const PLAYER_HEIGHT = Math.round(width * (9 / 16));
 
+// ─── Pick best trailer from TMDB video list ──────────────────────
+function pickTrailer(videos = []) {
+  const yt = (v) => v?.site === 'YouTube' && v?.key;
+  return (
+    videos.find((v) => yt(v) && v.type === 'Trailer' && v.official) ||
+    videos.find((v) => yt(v) && v.type === 'Trailer') ||
+    videos.find((v) => yt(v) && v.type === 'Teaser') ||
+    videos.find((v) => yt(v)) ||
+    null
+  );
+}
+
+// ─── Player: web = iframe, native = thumbnail + deep-link ────────
+function TrailerPlayer({ trailerKey, title }) {
+  const embedUrl = `https://www.youtube.com/embed/${trailerKey}?autoplay=1&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  const watchUrl = `https://www.youtube.com/watch?v=${trailerKey}`;
+  const thumbUrl = `https://img.youtube.com/vi/${trailerKey}/hqdefault.jpg`;
+
+  if (Platform.OS === 'web') {
+    // Web: inline iframe — always works
+    return (
+      <View style={styles.playerContainer}>
+        {React.createElement('iframe', {
+          src: embedUrl,
+          title: title || 'Trailer',
+          frameBorder: '0',
+          allow:
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+          allowFullScreen: true,
+          style: {
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            display: 'block',
+            backgroundColor: '#000',
+          },
+        })}
+      </View>
+    );
+  }
+
+  // Native: thumbnail card → opens YouTube app / browser
+  const openYouTube = () => {
+    const appUrl = `youtube://watch?v=${trailerKey}`;
+    Linking.canOpenURL(appUrl)
+      .then((can) => Linking.openURL(can ? appUrl : watchUrl))
+      .catch(() => Linking.openURL(watchUrl));
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.playerContainer}
+      onPress={openYouTube}
+      activeOpacity={0.88}
+    >
+      <Image
+        source={{ uri: thumbUrl }}
+        style={StyleSheet.absoluteFill}
+        resizeMode="cover"
+      />
+      {/* Dark scrim */}
+      <View style={styles.scrim} />
+      {/* Play circle */}
+      <View style={styles.playCircle}>
+        <Text style={styles.playIcon}>▶</Text>
+      </View>
+      {/* Label */}
+      <View style={styles.tapLabel}>
+        <Text style={styles.tapLabelText}>Tap to watch on YouTube</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Modal ───────────────────────────────────────────────────────
 export default function TrailerModal({ visible, movieId, title, onClose }) {
   const [trailerKey, setTrailerKey] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Fetch trailer when modal opens
   useEffect(() => {
     if (!visible || !movieId) return;
 
@@ -31,16 +121,7 @@ export default function TrailerModal({ visible, movieId, title, onClose }) {
 
     getMovieVideos(movieId)
       .then((data) => {
-        const videos = data.results || [];
-        // Prefer official YouTube trailer, fallback to teaser or any clip
-        const trailer =
-          videos.find(
-            (v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official
-          ) ||
-          videos.find((v) => v.site === 'YouTube' && v.type === 'Trailer') ||
-          videos.find((v) => v.site === 'YouTube' && v.type === 'Teaser') ||
-          videos.find((v) => v.site === 'YouTube');
-
+        const trailer = pickTrailer(data.results || []);
         if (trailer) {
           setTrailerKey(trailer.key);
         } else {
@@ -51,7 +132,7 @@ export default function TrailerModal({ visible, movieId, title, onClose }) {
       .finally(() => setLoading(false));
   }, [visible, movieId]);
 
-  // Fade-in animation when the modal becomes visible
+  // Fade-in / reset animation
   useEffect(() => {
     if (visible) {
       Animated.timing(fadeAnim, {
@@ -64,10 +145,6 @@ export default function TrailerModal({ visible, movieId, title, onClose }) {
     }
   }, [visible]);
 
-  const embedUri = trailerKey
-    ? `https://www.youtube.com/embed/${trailerKey}?autoplay=1&controls=1&rel=0&modestbranding=1`
-    : null;
-
   return (
     <Modal
       visible={visible}
@@ -78,7 +155,7 @@ export default function TrailerModal({ visible, movieId, title, onClose }) {
     >
       <StatusBar hidden />
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        {/* Header row */}
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.titleText} numberOfLines={1}>
             {title || 'Trailer'}
@@ -93,52 +170,35 @@ export default function TrailerModal({ visible, movieId, title, onClose }) {
         </View>
 
         {/* Player area */}
-        <View style={styles.playerContainer}>
-          {loading && (
-            <View style={styles.center}>
-              <ActivityIndicator color={Colors.red} size="large" />
-              <Text style={styles.loadingText}>Loading trailer…</Text>
-            </View>
-          )}
+        {loading && (
+          <View style={styles.center}>
+            <ActivityIndicator color={Colors.red} size="large" />
+            <Text style={styles.loadingText}>Loading trailer…</Text>
+          </View>
+        )}
 
-          {error && !loading && (
-            <View style={styles.center}>
-              <Text style={styles.errorIcon}>🎬</Text>
-              <Text style={styles.errorText}>{error}</Text>
-              <TouchableOpacity onPress={onClose} style={styles.dismissBtn}>
-                <Text style={styles.dismissText}>Go Back</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+        {error && !loading && (
+          <View style={styles.center}>
+            <Text style={styles.errorIcon}>🎬</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity onPress={onClose} style={styles.dismissBtn}>
+              <Text style={styles.dismissText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-          {embedUri && !loading && (
-            <WebView
-              source={{ uri: embedUri }}
-              style={styles.webview}
-              allowsFullscreenVideo
-              mediaPlaybackRequiresUserAction={false}
-              javaScriptEnabled
-              domStorageEnabled
-              allowsInlineMediaPlayback
-              startInLoadingState
-              renderLoading={() => (
-                <View style={styles.webviewLoader}>
-                  <ActivityIndicator color={Colors.red} size="large" />
-                </View>
-              )}
-            />
-          )}
-        </View>
+        {trailerKey && !loading && (
+          <TrailerPlayer trailerKey={trailerKey} title={title} />
+        )}
 
-        {/* Tap-outside-to-close backdrop (bottom area) */}
+        {/* Tap-outside-to-close area */}
         <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
       </Animated.View>
     </Modal>
   );
 }
 
-const PLAYER_HEIGHT = width * (9 / 16); // 16:9 aspect ratio
-
+// ─── Styles ──────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -173,24 +233,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+
+  // Player
   playerContainer: {
     width,
     height: PLAYER_HEIGHT,
     backgroundColor: '#000',
     overflow: 'hidden',
   },
-  webview: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-  webviewLoader: {
+  scrim: {
     ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+  },
+  playCircle: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderWidth: 2,
+    borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
+    marginLeft: -32,
+    marginTop: -32,
   },
+  playIcon: {
+    color: Colors.white,
+    fontSize: 24,
+    marginLeft: 4,
+  },
+  tapLabel: {
+    position: 'absolute',
+    bottom: 14,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  tapLabelText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+  },
+
+  // States
   center: {
-    flex: 1,
+    height: PLAYER_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
@@ -201,9 +292,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 12,
   },
-  errorIcon: {
-    fontSize: 48,
-  },
+  errorIcon: { fontSize: 48 },
   errorText: {
     color: Colors.textSecondary,
     fontSize: 14,
@@ -222,7 +311,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  backdrop: {
-    flex: 1,
-  },
+  backdrop: { flex: 1 },
 });

@@ -12,15 +12,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Colors } from '../theme/colors';
 import { useUser } from '../context/UserContext';
+import { Dimensions } from 'react-native';
 
 import ProfileHeader from '../components/profile/ProfileHeader';
 import StatsBar from '../components/profile/StatsBar';
 import ProfileTabs from '../components/profile/ProfileTabs';
 import MovieListItem from '../components/profile/MovieListItem';
 
-const COLUMN_GAP = 12;
-
-
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SIDE_PAD = 18;
+const GAP = 12;
+const TARGET_CARD = 130;
+const NUM_COLS = Math.max(2, Math.floor((SCREEN_WIDTH - SIDE_PAD * 2 + GAP) / (TARGET_CARD + GAP)));
+const CARD_WIDTH = (SCREEN_WIDTH - SIDE_PAD * 2 - GAP * (NUM_COLS - 1)) / NUM_COLS;
 
 function EmptyState({ message }) {
   return (
@@ -66,26 +70,15 @@ export default function ProfileScreen() {
       return <EmptyState message="Nothing here yet. Start adding movies!" />;
     }
 
-    // Chunk into pairs for 2-column layout
-    const rows = [];
-    for (let i = 0; i < items.length; i += 2) {
-      rows.push(items.slice(i, i + 2));
-    }
-
     return (
       <View style={styles.grid}>
-        {rows.map((row, rowIdx) => (
-          <View key={rowIdx} style={styles.gridRow}>
-            {row.map((movie) => (
-              <MovieListItem
-                key={movie.id}
-                movie={movie}
-                onRemove={onRemove}
-              />
-            ))}
-            {/* Fill empty second slot */}
-            {row.length === 1 && <View style={styles.gridPlaceholder} />}
-          </View>
+        {items.map((movie) => (
+          <MovieListItem
+            key={movie.id}
+            movie={movie}
+            onRemove={onRemove}
+            cardWidth={CARD_WIDTH}
+          />
         ))}
       </View>
     );
@@ -279,14 +272,9 @@ const styles = StyleSheet.create({
   // Grid
   grid: {
     paddingHorizontal: 18,
-  },
-  gridRow: {
     flexDirection: 'row',
-    gap: COLUMN_GAP,
-    marginBottom: 0,
-  },
-  gridPlaceholder: {
-    flex: 1,
+    flexWrap: 'wrap',
+    gap: GAP,
   },
 
   // Empty state
