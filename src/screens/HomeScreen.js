@@ -173,6 +173,10 @@ export default function HomeScreen({ navigation }) {
     if (movie) setTrailerMovie(movie);
   };
 
+  const handleSeeAll = ({ title, emoji, fetchType, genreId }) => {
+    navigation.navigate('SeeAll', { title, emoji, fetchType, genreId });
+  };
+
   const handleMoviePress = (movie) => {
     if (!movie) return;
     navigation.navigate('MovieDetail', { movieId: movie.id, movie });
@@ -245,6 +249,14 @@ export default function HomeScreen({ navigation }) {
             movies={genreMovies}
             loading={loadingGenre}
             onMoviePress={handleMoviePress}
+            onSeeAll={() =>
+              handleSeeAll({
+                title: 'Genre Results',
+                emoji: '🎭',
+                fetchType: 'genre',
+                genreId: selectedGenre,
+              })
+            }
           />
         ) : (
           <>
@@ -255,6 +267,9 @@ export default function HomeScreen({ navigation }) {
               movies={trending}
               loading={loadingTrending}
               onMoviePress={handleMoviePress}
+              onSeeAll={() =>
+                handleSeeAll({ title: 'Top Trending Now', emoji: '🔥', fetchType: 'trending' })
+              }
             />
 
             {/* Popular This Week */}
@@ -264,6 +279,9 @@ export default function HomeScreen({ navigation }) {
               movies={popular}
               loading={loadingPopular}
               onMoviePress={handleMoviePress}
+              onSeeAll={() =>
+                handleSeeAll({ title: 'Popular This Week', emoji: '🗓️', fetchType: 'popular' })
+              }
             />
 
             {/* Recommended For You */}
@@ -273,6 +291,9 @@ export default function HomeScreen({ navigation }) {
               movies={topRated}
               loading={loadingTopRated}
               onMoviePress={handleMoviePress}
+              onSeeAll={() =>
+                handleSeeAll({ title: 'Recommended For You', emoji: '✨', fetchType: 'topRated' })
+              }
             />
           </>
         )}
