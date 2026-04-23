@@ -163,11 +163,11 @@ export default function LoginScreen({ navigation }) {
           <Animated.View
             style={[styles.logoSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
           >
-            <Text style={styles.logoText}>
-              <Text style={styles.logoWhite}>MOVIE</Text>
-              <Text style={styles.logoRed}>DB</Text>
-            </Text>
-            <Text style={styles.tagline}>Your Personal Cinema</Text>
+            <Image
+              source={require('../../assets/moviedb_logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </Animated.View>
 
           {/* Card */}
@@ -267,11 +267,8 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     paddingHorizontal: 24,
   },
-  logoSection: { alignItems: 'center', marginBottom: 36 },
-  logoText: { fontSize: 34, fontWeight: '900', letterSpacing: 3 },
-  logoWhite: { color: Colors.white },
-  logoRed: { color: Colors.red },
-  tagline: { color: Colors.textSecondary, fontSize: 13, marginTop: 4, letterSpacing: 1 },
+  logoSection: { alignItems: 'center', marginBottom: 16 },
+  logoImage: { width: 200, height: 200 },
   card: {
     width: '100%',
     maxWidth: 400,

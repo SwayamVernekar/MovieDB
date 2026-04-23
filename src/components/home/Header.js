@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Image, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '../../theme/colors';
 
 export default function Header({ onNotificationPress, onProfilePress }) {
   return (
     <View style={styles.container}>
       {/* Logo */}
-      <Text style={styles.logo}>
-        <Text style={styles.logoWhite}>MOVIE</Text>
-        <Text style={styles.logoRed}>DB</Text>
-      </Text>
+      <Image
+        source={require('../../../assets/moviedb_intab_logo.png')}
+        style={styles.logo}
+        resizeMode="contain"
+      />
 
       {/* Right icons */}
       <View style={styles.icons}>
@@ -45,15 +46,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   logo: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 2,
-  },
-  logoWhite: {
-    color: Colors.white,
-  },
-  logoRed: {
-    color: Colors.red,
+    width: 130,
+    height: 40,
   },
   icons: {
     flexDirection: 'row',

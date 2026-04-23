@@ -158,11 +158,11 @@ export default function SignUpScreen({ navigation }) {
         >
           {/* ── Logo ── */}
           <Animated.View style={[styles.logoSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <Text style={styles.logoText}>
-              <Text style={styles.logoWhite}>MOVIE</Text>
-              <Text style={styles.logoRed}>DB</Text>
-            </Text>
-            <Text style={styles.tagline}>Your Personal Cinema</Text>
+            <Image
+              source={require('../../assets/moviedb_logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </Animated.View>
 
           {/* ── Card ── */}
@@ -290,27 +290,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
-  // Logo
   logoSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
   },
-  logoText: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: 3,
-  },
-  logoWhite: {
-    color: Colors.white,
-  },
-  logoRed: {
-    color: Colors.red,
-  },
-  tagline: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    marginTop: 4,
-    letterSpacing: 1,
+  logoImage: {
+    width: 200,
+    height: 200,
   },
 
   // Card
