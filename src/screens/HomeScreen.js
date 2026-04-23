@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -17,6 +17,7 @@ import {
   getTopRatedMovies,
   getGenres,
   getMovieDetails,
+  getMoviesByGenre,
 } from '../api/tmdb';
 import { useUser } from '../context/UserContext';
 
@@ -45,6 +46,11 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [trailerMovie, setTrailerMovie] = useState(null);
   const [error, setError] = useState(null);
+
+  // Genre-filtered results
+  const [genreMovies, setGenreMovies] = useState([]);
+  const [loadingGenre, setLoadingGenre] = useState(false);
+  const genreFetchId = useRef(0);
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -108,6 +114,46 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch movies by selected genre
+  useEffect(() => {
+    if (selectedGenre === 0) {
+      setGenreMovies([]);
+      setLoadingGenre(false);
+      return;
+    }
+
+    const fetchId = ++genreFetchId.current;
+    setLoadingGenre(true);
+    setGenreMovies([]);
+
+    getMoviesByGenre(selectedGenre)
+      .then((data) => {
+        if (fetchId !== genreFetchId.current) return; // stale
+        const results = (data.results || []).filter(
+          (r) => r.poster_path || r.backdrop_path
+        );
+        setGenreMovies(results.slice(0, 20));
+        // Update hero to first genre result (enrich in background)
+        if (results.length > 0) {
+          setHero(results[0]);
+          getMovieDetails(results[0].id)
+            .then((detail) => {
+              if (fetchId !== genreFetchId.current) return;
+              setHero(detail);
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {
+        if (fetchId !== genreFetchId.current) return;
+        setGenreMovies([]);
+      })
+      .finally(() => {
+        if (fetchId !== genreFetchId.current) return;
+        setLoadingGenre(false);
+      });
+  }, [selectedGenre]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -191,32 +237,45 @@ export default function HomeScreen({ navigation }) {
           />
         )}
 
-        {/* Top Trending Now */}
-        <SectionRow
-          title="Top Trending Now"
-          emoji="🔥"
-          movies={trending}
-          loading={loadingTrending}
-          onMoviePress={handleMoviePress}
-        />
+        {/* Genre-filtered results OR default sections */}
+        {selectedGenre !== 0 ? (
+          <SectionRow
+            title="Genre Results"
+            emoji="🎭"
+            movies={genreMovies}
+            loading={loadingGenre}
+            onMoviePress={handleMoviePress}
+          />
+        ) : (
+          <>
+            {/* Top Trending Now */}
+            <SectionRow
+              title="Top Trending Now"
+              emoji="🔥"
+              movies={trending}
+              loading={loadingTrending}
+              onMoviePress={handleMoviePress}
+            />
 
-        {/* Popular This Week */}
-        <SectionRow
-          title="Popular This Week"
-          emoji="🗓️"
-          movies={popular}
-          loading={loadingPopular}
-          onMoviePress={handleMoviePress}
-        />
+            {/* Popular This Week */}
+            <SectionRow
+              title="Popular This Week"
+              emoji="🗓️"
+              movies={popular}
+              loading={loadingPopular}
+              onMoviePress={handleMoviePress}
+            />
 
-        {/* Recommended For You */}
-        <SectionRow
-          title="Recommended For You"
-          emoji="✨"
-          movies={topRated}
-          loading={loadingTopRated}
-          onMoviePress={handleMoviePress}
-        />
+            {/* Recommended For You */}
+            <SectionRow
+              title="Recommended For You"
+              emoji="✨"
+              movies={topRated}
+              loading={loadingTopRated}
+              onMoviePress={handleMoviePress}
+            />
+          </>
+        )}
 
         {/* Bottom spacing for tab bar */}
         <View style={{ height: 24 }} />

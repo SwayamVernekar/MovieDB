@@ -77,3 +77,11 @@ export const getMovieReviews = (movieId) =>
 /** Movie videos (trailers, teasers, clips) */
 export const getMovieVideos = (movieId) =>
   tmdbFetch(`/movie/${movieId}/videos`);
+
+/** Discover movies by genre */
+export const getMoviesByGenre = (genreId, page = 1) =>
+  tmdbFetch('/discover/movie', {
+    with_genres: genreId,
+    sort_by: 'popularity.desc',
+    page,
+  });
