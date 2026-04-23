@@ -25,6 +25,7 @@ import SearchBar from '../components/home/SearchBar';
 import GenreFilter from '../components/home/GenreFilter';
 import HeroBanner from '../components/home/HeroBanner';
 import SectionRow from '../components/home/SectionRow';
+import TrailerModal from '../components/common/TrailerModal';
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -42,6 +43,7 @@ export default function HomeScreen({ navigation }) {
   const [loadingPopular, setLoadingPopular] = useState(true);
   const [loadingTopRated, setLoadingTopRated] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [trailerMovie, setTrailerMovie] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
@@ -121,6 +123,10 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handlePlay = (movie) => {
+    if (movie) setTrailerMovie(movie);
+  };
+
   const handleMoviePress = (movie) => {
     if (!movie) return;
     navigation.navigate('MovieDetail', { movieId: movie.id, movie });
@@ -179,7 +185,7 @@ export default function HomeScreen({ navigation }) {
         ) : (
           <HeroBanner
             movie={hero}
-            onPlay={() => {}}
+            onPlay={handlePlay}
             onAddToList={handleAddToList}
             isInList={hero ? isInList(hero.id) : false}
           />
@@ -215,6 +221,14 @@ export default function HomeScreen({ navigation }) {
         {/* Bottom spacing for tab bar */}
         <View style={{ height: 24 }} />
       </ScrollView>
+
+      {/* Trailer Modal */}
+      <TrailerModal
+        visible={!!trailerMovie}
+        movieId={trailerMovie?.id}
+        title={trailerMovie?.title || trailerMovie?.name}
+        onClose={() => setTrailerMovie(null)}
+      />
     </View>
   );
 }
